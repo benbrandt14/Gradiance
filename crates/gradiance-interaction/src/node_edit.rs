@@ -1,8 +1,9 @@
 //! Behavior-node picking and dragging: click a node's glyph to select it
 //! individually; press and drag to **move** it — the glyph follows the
 //! cursor and, on release, the node re-attaches to the body under the
-//! release point (offset in its frame) or becomes a free node on empty
-//! canvas, all as one undoable property edit.
+//! release point (offset in its frame, its effect centered where it
+//! rests) — and on empty canvas the node goes with the gesture (a node
+//! rests on a body or not at all), one undoable edit either way.
 //!
 //! Node picking runs in the Select tool state, after
 //! [`pick_joint`](crate::joint_edit::pick_joint) (joints keep priority)
@@ -29,6 +30,7 @@ use gradiance_core::units::PosRot;
 use gradiance_domain::Body;
 use gradiance_domain::group::SelectionGroup;
 use gradiance_domain::node::{BehaviorNode, NodeAttachment, NodeKind};
+use gradiance_op::{InvokeOp, json};
 
 /// Screen-space pick radius for a node glyph (logical px): the drawn ring
 /// (6 px, `render::tracer::draw_node_glyphs`) plus the shared 4 px pick
@@ -60,7 +62,7 @@ fn node_at(
 /// In-progress behavior-node drag. The node's glyph follows
 /// [`cursor`](Self::cursor) (the renderer draws it there — its `Transform`
 /// is untouched until the commit); release commits **one** property edit:
-/// re-attached to the body under the release, or free on empty canvas.
+/// re-attached to the body under the release, or deleted on empty canvas.
 #[derive(Resource, Default, Debug)]
 pub struct NodeDrag {
     /// The dragged node and its stable id.
@@ -175,7 +177,7 @@ pub fn arm_node_drag(
 /// cursor), and on release commits **one** `PropertyEditIntent` — the node
 /// re-attached to the topmost body under the release point (offset in its
 /// frame, a thruster's or laser's axis re-expressed so its **world** angle
-/// is unchanged) or free at the release point. The old placement is
+/// is unchanged) — or, on empty canvas, deleted outright. The old placement is
 /// captured for undo, so the edit reverses cleanly.
 #[expect(clippy::too_many_arguments)] // one gesture, grouped reads
 pub fn drag_node(
@@ -188,6 +190,7 @@ pub fn drag_node(
     mut drag: ResMut<NodeDrag>,
     mut active: ResMut<ActiveGesture>,
     mut edits: MessageWriter<PropertyEditIntent>,
+    mut delete: MessageWriter<InvokeOp>,
 ) {
     let Some((node, node_id)) = drag.target else {
         return;
@@ -220,17 +223,42 @@ pub fn drag_node(
         let target = world
             .topmost_body_at(p)
             .and_then(|e| Some((world.id_of(e)?, world.pose_of(e)?)));
-        let changes = relocate_changes(
-            node_id,
-            kind,
-            attachment,
-            PosRot::from_transform(transform),
-            p,
-            old_rot,
-            target,
-        );
-        if !changes.is_empty() {
-            edits.write(PropertyEditIntent { changes });
+        let pose = PosRot::from_transform(transform);
+        match relocate(kind, attachment, p, old_rot, target) {
+            NodeRelocation::Move {
+                attachment: to,
+                kind: turned,
+            } => {
+                let mut changes = vec![PropertyChange {
+                    id: node_id,
+                    old: PropertyValue::NodePlace(*attachment, pose),
+                    new: PropertyValue::NodePlace(
+                        to,
+                        PosRot {
+                            pos: p,
+                            rot: pose.rot,
+                        },
+                    ),
+                }];
+                if let Some(new_kind) = turned {
+                    changes.push(PropertyChange {
+                        id: node_id,
+                        old: PropertyValue::NodeKind(kind.clone()),
+                        new: PropertyValue::NodeKind(new_kind),
+                    });
+                }
+                edits.write(PropertyEditIntent { changes });
+            }
+            // Nothing under the release: the node goes with the gesture —
+            // the same delete operation the menu's row invokes, undo and
+            // all. A node rests on a body or not at all.
+            NodeRelocation::Delete => {
+                delete.write(InvokeOp::with(
+                    "body.delete",
+                    json!({"i": node_id.0.to_string()}),
+                ));
+            }
+            NodeRelocation::Unchanged => {}
         }
         return;
     }
@@ -240,60 +268,61 @@ pub fn drag_node(
     }
 }
 
-/// The property changes that move a node from `(attachment, pose)` to
-/// world point `p`: re-attached to `target` (offset in its frame) or free,
-/// with a thruster's or laser's axis re-expressed so the world direction
-/// it pushes/aims stays put (`old_rot` is the old target's live rotation).
-/// Empty when nothing changes. Pure, so the relocation rules are
-/// unit-testable without a world.
+/// What one node drag commits on release. The node **re-attaches** to
+/// the body under the release (offset in its frame — its effect, the
+/// push or the beam, centered where it rests), with a thruster's or
+/// laser's axis re-expressed so the world direction it pushes/aims never
+/// changes; with nothing under the release the node **goes with the
+/// gesture** — a node rests on a body or not at all, never orphaned on
+/// the background. Pure over its reads, so the rules are unit-testable
+/// without a world.
+#[derive(Debug, PartialEq)]
+enum NodeRelocation {
+    /// Re-attached: the new placement, with the payload re-expressed when
+    /// the new frame is turned relative to the old.
+    Move {
+        /// The new attachment (target + offset in its frame).
+        attachment: NodeAttachment,
+        /// The payload with its axis re-expressed, when the frame differs.
+        kind: Option<NodeKind>,
+    },
+    /// Nothing under the release: delete the node.
+    Delete,
+    /// The node already lives exactly where the release landed.
+    Unchanged,
+}
+
+/// Where a drag that releases at `p` puts a node that was
+/// `(kind, attachment)` on a frame rotated `old_rot`, given the topmost
+/// `target` body under the release (`None` on empty canvas).
 #[must_use]
-fn relocate_changes(
-    id: StableId,
+fn relocate(
     kind: &NodeKind,
     attachment: &NodeAttachment,
-    pose: PosRot,
     p: Vec2,
     old_rot: f32,
     target: Option<(StableId, PosRot)>,
-) -> Vec<PropertyChange> {
-    let (new_attachment, new_rot) = match target {
-        Some((body_id, body_pose)) => (
-            NodeAttachment::to(
-                body_id,
-                Vec2::from_angle(-body_pose.rot).rotate(p - body_pose.pos),
-            ),
-            body_pose.rot,
-        ),
-        None => (NodeAttachment::free(), 0.0),
+) -> NodeRelocation {
+    let Some((body_id, body_pose)) = target else {
+        return NodeRelocation::Delete;
     };
+    let new_attachment = NodeAttachment::to(
+        body_id,
+        Vec2::from_angle(-body_pose.rot).rotate(p - body_pose.pos),
+    );
     if new_attachment == *attachment {
-        return Vec::new();
+        return NodeRelocation::Unchanged;
     }
-    let mut changes = vec![PropertyChange {
-        id,
-        old: PropertyValue::NodePlace(*attachment, pose),
-        new: PropertyValue::NodePlace(
-            new_attachment,
-            PosRot {
-                pos: p,
-                rot: pose.rot,
-            },
-        ),
-    }];
     // A moved target re-expresses the axis in the new frame; the same
-    // target keeps its frame angle (and a free node's frame *is* the
-    // world's). The rule is `NodeKind::reframe`, shared with the
-    // cut/merge rewires.
-    if new_attachment.target != attachment.target
-        && let Some(new_kind) = kind.reframe(old_rot, new_rot)
-    {
-        changes.push(PropertyChange {
-            id,
-            old: PropertyValue::NodeKind(kind.clone()),
-            new: PropertyValue::NodeKind(new_kind),
-        });
+    // target keeps its frame angle. The rule is `NodeKind::reframe`,
+    // shared with the cut/merge rewires.
+    let turned = (new_attachment.target != attachment.target)
+        .then(|| kind.reframe(old_rot, body_pose.rot))
+        .flatten();
+    NodeRelocation::Move {
+        attachment: new_attachment,
+        kind: turned,
     }
-    changes
 }
 
 #[cfg(test)]
@@ -303,65 +332,59 @@ mod tests {
     use gradiance_domain::thruster::Thruster;
     use gradiance_domain::tracer::Tracer;
 
-    /// A laser moved from a rotated body to empty space keeps aiming the
-    /// same world way: its angle is re-expressed into the world frame, one
-    /// placement change plus one kind change.
+    /// A release over empty canvas takes the node with it: a node rests
+    /// on a body or not at all.
     #[test]
-    fn a_detached_laser_keeps_its_world_angle() {
-        let id = StableId::new();
+    fn a_release_on_empty_canvas_deletes_the_node() {
         let kind = NodeKind::Laser(Laser::default());
         let attached = NodeAttachment::to(StableId::new(), Vec2::ZERO);
-        let changes = relocate_changes(
-            id,
-            &kind,
-            &attached,
-            PosRot {
-                pos: Vec2::ZERO,
-                rot: 0.0,
-            },
-            Vec2::new(1.0, 2.0),
-            0.5,  // the body it rode was rotated 0.5 rad
-            None, // released over empty canvas
+        assert_eq!(
+            relocate(&kind, &attached, Vec2::new(1.0, 2.0), 0.5, None),
+            NodeRelocation::Delete
         );
-        assert_eq!(changes.len(), 2, "place + re-expressed angle: {changes:?}");
-        let PropertyValue::NodePlace(attachment, pose) = &changes[0].new else {
-            panic!("the first change is the placement: {changes:?}");
-        };
-        assert_eq!(attachment.target, None, "empty canvas: free");
-        assert_eq!(pose.pos, Vec2::new(1.0, 2.0));
-        let PropertyValue::NodeKind(NodeKind::Laser(laser)) = &changes[1].new else {
-            panic!("the second change is the kind: {changes:?}");
-        };
-        assert_eq!(laser.angle.value(), Laser::default().angle.value() + 0.5);
+        // A free node dragged within empty space goes too.
+        assert_eq!(
+            relocate(
+                &kind,
+                &NodeAttachment::free(),
+                Vec2::new(1.0, 2.0),
+                0.0,
+                None
+            ),
+            NodeRelocation::Delete
+        );
     }
 
     /// Re-attaching to a rotated body re-expresses the axis in *its*
-    /// frame, so the world direction is unchanged.
+    /// frame, so the world direction is unchanged, and the offset puts
+    /// the node — its effect — exactly where it rests.
     #[test]
     fn a_retargeted_thruster_points_the_same_world_way() {
-        let id = StableId::new();
         let kind = NodeKind::Thruster(Thruster::default());
         let free = NodeAttachment::free();
-        let changes = relocate_changes(
-            id,
+        let moved = relocate(
             &kind,
             &free,
-            PosRot {
-                pos: Vec2::ZERO,
-                rot: 0.0,
-            },
-            Vec2::new(2.0, 0.0),
+            Vec2::new(2.0, 1.0),
             0.0, // it was free: the world and its frame agree
             Some((
                 StableId::new(),
                 PosRot {
-                    pos: Vec2::ZERO,
+                    pos: Vec2::new(2.0, 1.0),
                     rot: -0.25,
                 },
             )),
         );
-        let PropertyValue::NodeKind(NodeKind::Thruster(t)) = &changes[1].new else {
-            panic!("kind change: {changes:?}");
+        let NodeRelocation::Move { attachment, kind } = &moved else {
+            panic!("a body was under the release: {moved:?}");
+        };
+        assert_eq!(
+            attachment.offset.value(),
+            Vec2::ZERO,
+            "the node rests at the body's origin, its effect centered there"
+        );
+        let Some(NodeKind::Thruster(t)) = kind else {
+            panic!("the payload turned with the frame: {moved:?}");
         };
         assert_eq!(
             t.angle.value(),
@@ -373,46 +396,50 @@ mod tests {
     /// A tracer's drag never invents a kind change (there is no axis to
     /// re-express).
     #[test]
-    fn a_tracer_drag_changes_only_its_placement() {
-        let id = StableId::new();
+    fn a_tracer_drag_moves_only_its_placement() {
         let kind = NodeKind::Tracer(Tracer::default());
         let attached = NodeAttachment::to(StableId::new(), Vec2::ZERO);
-        let changes = relocate_changes(
-            id,
+        let moved = relocate(
             &kind,
             &attached,
-            PosRot {
-                pos: Vec2::ZERO,
-                rot: 0.0,
-            },
             Vec2::new(0.0, 5.0),
             0.0,
-            None,
+            Some((
+                StableId::new(),
+                PosRot {
+                    pos: Vec2::new(1.0, 0.0),
+                    rot: 0.0,
+                },
+            )),
         );
-        assert_eq!(changes.len(), 1, "placement only: {changes:?}");
+        let NodeRelocation::Move { kind, .. } = &moved else {
+            panic!("{moved:?}");
+        };
+        assert!(kind.is_none(), "no axis, no turn: {moved:?}");
     }
 
     /// Releasing where the node already lives changes nothing.
     #[test]
-    fn a_move_that_changes_nothing_is_no_change() {
-        let id = StableId::new();
+    fn a_release_where_it_already_lives_changes_nothing() {
         let kind = NodeKind::Thruster(Thruster::default());
-        let free = NodeAttachment::free();
-        assert!(
-            relocate_changes(
-                id,
+        let host = StableId::new();
+        let attached = NodeAttachment::to(host, Vec2::new(3.0, 0.0));
+        assert_eq!(
+            relocate(
                 &kind,
-                &free,
-                PosRot {
-                    pos: Vec2::new(2.0, 2.0),
-                    rot: 0.0
-                },
-                Vec2::new(2.0, 2.0),
+                &attached,
+                Vec2::new(5.0, 0.0),
                 0.0,
-                None,
-            )
-            .is_empty(),
-            "free at the same point: no change"
+                Some((
+                    host,
+                    PosRot {
+                        pos: Vec2::new(2.0, 0.0),
+                        rot: 0.0
+                    }
+                )),
+            ),
+            NodeRelocation::Unchanged,
+            "the same body at the same offset: nothing to commit"
         );
     }
 }

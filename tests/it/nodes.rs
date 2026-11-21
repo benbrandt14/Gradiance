@@ -422,11 +422,11 @@ fn thruster_record(pos: Vec2, attach: NodeAttachment) -> NodeRecord {
     }
 }
 
-/// Drag a thruster off its body onto empty canvas: it becomes a free node
-/// at the release point, as one undo step that restores both the
-/// attachment and the position.
+/// Drag a thruster off its body onto empty canvas: the node goes with the
+/// gesture (a node rests on a body or not at all), as one undo step that
+/// puts it back where it rode.
 #[test]
-fn dragging_a_node_off_its_body_makes_it_free_and_undoes() {
+fn dragging_a_node_off_its_body_deletes_it_and_undoes() {
     let mut app = paused_app();
     let body = box_record(Vec2::ZERO, 20.0, 20.0);
     let body_id = body.id;
@@ -464,9 +464,10 @@ fn dragging_a_node_off_its_body_makes_it_free_and_undoes() {
     mouse(&mut app, false);
     app.update();
 
-    let (attachment, pos) = node_placement(&app, node_id);
-    assert_eq!(attachment.target, None, "empty canvas: free");
-    assert_eq!(pos, Vec2::new(0.0, 60.0));
+    assert!(
+        entity_of(&app, node_id).is_none(),
+        "nothing under the release: the node went with the gesture"
+    );
     assert_eq!(
         app.world().resource::<CommandStack>().undo_len(),
         before + 1,
@@ -593,9 +594,10 @@ fn the_drag_tool_moves_the_node_not_the_body_behind_it() {
     mouse(&mut app, false);
     app.update();
 
-    let (attachment, pos) = node_placement(&app, node_id);
-    assert_eq!(attachment.target, None, "the node came off its body");
-    assert_eq!(pos, Vec2::new(0.0, 80.0));
+    assert!(
+        entity_of(&app, node_id).is_none(),
+        "dragged to empty canvas: the node went with the gesture"
+    );
     let body_pos = app
         .world()
         .get::<Transform>(body_entity)
