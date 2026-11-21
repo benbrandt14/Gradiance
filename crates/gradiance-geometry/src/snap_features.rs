@@ -21,7 +21,7 @@
 //! which a circle about a centre first touches an outline).
 
 use crate::contours::Contours;
-use crate::polygonize::polygonize;
+use crate::polygonize::{ShapeContours, polygonize};
 use crate::shape::ShapeDef;
 use crate::snapping::project_on_segment;
 use bevy::math::Vec2;
@@ -100,6 +100,24 @@ pub fn snap_outline(shape: &ShapeDef) -> SnapOutline {
         return SnapOutline::Capsule { a, b, radius };
     }
     SnapOutline::Contours(polygonize(shape))
+}
+
+/// [`snap_outline`] with a body's cached contours ([`ShapeContours`]):
+/// exact circles and
+/// capsules still read the shape, and every other shape reads the largest
+/// cached component instead of re-contouring the field — the per-frame
+/// snapping cost for a scene of polygonal bodies. Falls back to
+/// [`snap_outline`] when the cache is empty (an invalid shape kept its old
+/// collider) or the shape may be an exact leaf.
+pub fn snap_outline_cached(shape: &ShapeDef, cached: &ShapeContours) -> SnapOutline {
+    if !matches!(
+        shape,
+        ShapeDef::Circle { .. } | ShapeDef::Capsule { .. } | ShapeDef::Placed { .. }
+    ) && let Some(largest) = cached.largest()
+    {
+        return SnapOutline::Contours(largest.clone());
+    }
+    snap_outline(shape)
 }
 
 /// `(a, b, radius)` when `shape` is a capsule under zero or more rigid

@@ -183,8 +183,17 @@ pub struct BuoyancyScratch {
 /// any convex tank, 1 for a sea), `V` the body's outline vertices (4 for a
 /// box, 48 for a circle). No allocation once the scratch has grown, no
 /// contour.
+///
+/// A pushed body is also **woken**: a floater settles by bobbing toward its
+/// waterline, and a body left asleep mid-bob freezes at whatever depth it
+/// had reached (sleeping skips the very forces that were still converging
+/// it). Submerged bodies therefore never sleep — the price of an
+/// equilibrium that stays honest. Fields and air drag keep `Box2D`'s
+/// constant-of-the-scene semantics instead: they do not wake, so a body
+/// hovering in a field at rest simply stays put.
 #[expect(clippy::type_complexity, reason = "two filtered queries")]
 pub fn apply_buoyancy(
+    mut commands: Commands,
     gravity: Res<Gravity>,
     fixed: Res<Time<Fixed>>,
     physics: Res<Time<Physics>>,
@@ -200,6 +209,7 @@ pub fn apply_buoyancy(
     >,
     mut bodies: Query<
         (
+            Entity,
             Forces,
             &RigidBody,
             &ComputedMass,
@@ -229,7 +239,7 @@ pub fn apply_buoyancy(
         };
         let to_world = Vec2::from_angle(fluid_rot.as_radians());
         let to_fluid = Vec2::new(to_world.x, -to_world.y);
-        for (mut forces, rigid_body, mass, inertia, com, outline) in &mut bodies {
+        for (entity, mut forces, rigid_body, mass, inertia, com, outline) in &mut bodies {
             if !rigid_body.is_dynamic() || outline.0.is_empty() {
                 continue;
             }
@@ -266,6 +276,9 @@ pub fn apply_buoyancy(
             if let Some((force, point, torque)) = immersion.push(submerged, &motion, dt) {
                 forces.apply_force_at_point(force, point);
                 forces.apply_torque(torque);
+                // See the system docs: a submerged body stays awake so the
+                // bobbing converges instead of freezing off-waterline.
+                commands.queue(WakeBody(entity));
             }
         }
     }

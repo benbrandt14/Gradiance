@@ -35,6 +35,7 @@ use context::{draw_draft_preview, draw_manip_preview, run_draft_tool, run_manip_
 
 use crate::InteractionSet;
 use bevy::prelude::*;
+use gradiance_core::ids::StableId;
 use gradiance_core::states::ToolState;
 use gradiance_domain::Body;
 use gradiance_domain::depth::DepthBand;
@@ -185,39 +186,41 @@ fn clear_snap_reference(mut reference: ResMut<crate::snap::SnapReference>) {
     reference.0 = None;
 }
 
+/// The reads a hit-test sorts by: a body's shape (is it a ground?), its
+/// depth band, and its id (the stacking order within one band).
+pub type HitQuery<'w, 's> =
+    Query<'w, 's, (&'static ShapeDef, &'static DepthBand, &'static StableId), With<Body>>;
+
 /// All authored bodies at `p`, topmost first.
 ///
 /// The shallowest band (front face nearest the viewer) wins; ground
 /// half-planes always sort last (Algodoo behavior: you never
-/// accidentally grab the floor).
-pub fn bodies_at_sorted(
-    p: Vec2,
-    physics: &PhysicsQueries,
-    bodies: &Query<(&ShapeDef, &DepthBand), With<Body>>,
-) -> Vec<Entity> {
-    let mut hits: Vec<(bool, f32, Entity)> = physics
+/// accidentally grab the floor). Within one band the **newest** body is on
+/// top: ids are minted in creation order (`StableId::new`), and the
+/// renderer stacks equal bands the same way (`render::stack`), so a click
+/// picks the body you see. The tie used to fall to the entity index,
+/// which a cut or an undo reshuffles, while the drawing order was the
+/// GPU's: a body moved onto another picked the hidden one (brief J-2).
+pub fn bodies_at_sorted(p: Vec2, physics: &PhysicsQueries, bodies: &HitQuery) -> Vec<Entity> {
+    let mut hits: Vec<(bool, f32, StableId, Entity)> = physics
         .bodies_at_point(p)
         .into_iter()
         .filter_map(|entity| {
-            let (shape, band) = bodies.get(entity).ok()?;
+            let (shape, band, id) = bodies.get(entity).ok()?;
             let is_ground = shape.contains_half_plane();
-            Some((is_ground, band.sanitized().near.value(), entity))
+            Some((is_ground, band.sanitized().near.value(), *id, entity))
         })
         .collect();
     hits.sort_by(|a, b| {
         a.0.cmp(&b.0)
             .then(a.1.total_cmp(&b.1))
-            .then(a.2.index().cmp(&b.2.index()))
+            .then(b.2.0.cmp(&a.2.0))
     });
-    hits.into_iter().map(|(_, _, e)| e).collect()
+    hits.into_iter().map(|(.., e)| e).collect()
 }
 
 /// Hit-tests the topmost authored body at `p`.
-pub fn topmost_body_at(
-    p: Vec2,
-    physics: &PhysicsQueries,
-    bodies: &Query<(&ShapeDef, &DepthBand), With<Body>>,
-) -> Option<Entity> {
+pub fn topmost_body_at(p: Vec2, physics: &PhysicsQueries, bodies: &HitQuery) -> Option<Entity> {
     bodies_at_sorted(p, physics, bodies).first().copied()
 }
 

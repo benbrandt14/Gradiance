@@ -20,7 +20,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `body.chain` | `(chain path link width a b pins)` | edit | `spawn-chain` | — | Lay a chain of capsule links (about link long, width wide) hinged end to end along path [x0 y0 x1 y1 …]; pins "free", "bodies" (start to body a, end to body b, when they name one) or "world" (else to the world). Returns the links' ids. | `{"path": [-1, 1, 0, 0, 1, 1], "link": 0.25, "width": 0.06, "a": -1, "b": -1, "pins": "world"}` |
 | `body.count` | `(body-count)` | query | — | — | Number of authored bodies in the committed scene. | `{}` |
 | `body.count_at` | `(count-at x y)` | query | — | — | Number of bodies whose shape contains the world point (x, y). | `{"x": 0, "y": 1}` |
-| `body.cut` | `(cut ax ay bx by width)` | edit | `cut` | — | Sever every body crossed by the stroke a→b of the given width (metres). | `{"ax": -2, "ay": 1, "bx": 2, "by": 1, "width": 0.05}` |
+| `body.cut` | `(cut ax ay bx by width)` | edit | `cut` | — | Cut every body the stroke a→b passes through, at the given width (metres). | `{"ax": -2, "ay": 1, "bx": 2, "by": 1, "width": 0.05}` |
 | `body.delete` | `(delete i)` | edit | `delete` | Edit/Delete selection, Delete | Delete the i-th body (id order, same index as body-x) — undoable. | `{"i": 0}` |
 | `body.density` | `(body-density i)` | query | — | — | Mass density of the i-th body. | `{"i": 0}` |
 | `body.fillet_merge` | `(fillet-merge a b radius)` | edit | `fillet-merge` | Context/Merge with fillet | Fuse bodies a and b into one with a smooth fillet of radius metres where they meet (CSG smooth union); a survives. Bridges a gap under radius/2. Errors unless radius > 0. | `{"a": 0, "b": 1, "radius": 0.25}` |

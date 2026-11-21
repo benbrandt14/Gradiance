@@ -2,11 +2,12 @@
 //! discretization point** between SDF trees and every polygon consumer
 //! (colliders, meshes, snapping, scaling).
 
-use crate::contour::{FIELD_CELLS, contour_components};
+use crate::contour::{FIELD_CELLS, contour_components, contour_components_on_axes};
 use crate::contours::Contours;
 use crate::sdf;
 use crate::shape::ShapeDef;
 use bevy::math::Vec2;
+use bevy::prelude::Component;
 use gradiance_core::constants::{CIRCLE_SEGMENTS, GROUND_SLAB_DEPTH, GROUND_SLAB_WIDTH};
 
 /// Converts a shape into explicit contours (counter-clockwise outline).
@@ -81,6 +82,20 @@ pub fn polygonize_components(shape: &ShapeDef) -> Vec<Contours> {
     }
 }
 
+/// [`polygonize_components`] for a tree with a thin gap along its local
+/// `x` axis: always field-contoured, on a lattice whose centre row lies on
+/// that axis, so the gap separates the two sides however thin it is
+/// (`contour::contour_components_on_axes`). The cut command's
+/// discretization: it poses the body in the stroke's frame.
+pub fn polygonize_components_on_axes(shape: &ShapeDef) -> Vec<Contours> {
+    let (min, max) = sdf::aabb(shape);
+    let cell = field_cell(max - min, sdf::thinnest_solid(shape));
+    match sdf::UnionField::of(shape) {
+        Some(field) => contour_components_on_axes(|p| field.eval(p), min, max, cell),
+        None => contour_components_on_axes(|p| sdf::eval(shape, p), min, max, cell),
+    }
+}
+
 /// The most field samples a contoured tree with a thin feature takes: as
 /// many as a square tree takes at the coarse resolution
 /// ([`FIELD_CELLS`] across each side), so a fine contour costs no more
@@ -127,6 +142,44 @@ fn stadium(half_length: f32, radius: f32) -> Vec<Vec2> {
             std::f32::consts::FRAC_PI_2,
         ))
         .collect()
+}
+
+/// A body's polygonized shape, one [`Contours`] per connected component —
+/// the cached [`polygonize_components`] result.
+///
+/// Derived beside the collider when a shape changes
+/// (`physics::body_sync::sync_colliders`), and read by every per-frame
+/// polygon consumer (borders, snapping, selection outlines, debug overlays)
+/// so none of them contours an SDF in the frame loop. Never authored,
+/// never saved, never captured in undo records.
+#[derive(Component, Clone, Debug, Default, PartialEq)]
+pub struct ShapeContours(pub Vec<Contours>);
+
+impl ShapeContours {
+    /// The largest component — the single-[`Contours`] view of a body
+    /// ([`polygonize`] semantics; commands keep authored bodies
+    /// single-component).
+    pub fn largest(&self) -> Option<&Contours> {
+        self.0.iter().max_by(|a, b| {
+            a.area()
+                .partial_cmp(&b.area())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+    }
+}
+
+impl core::ops::Deref for ShapeContours {
+    type Target = Vec<Contours>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl core::ops::DerefMut for ShapeContours {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
 }
 
 fn rectangle(width: f32, height: f32, center: Vec2) -> Contours {
