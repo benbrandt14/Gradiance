@@ -279,6 +279,7 @@ mod tests {
             depth: DepthBand::default(),
             groups: Vec::new(),
             fluid: None,
+            motion: None,
         }
     }
 

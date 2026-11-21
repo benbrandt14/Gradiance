@@ -294,14 +294,14 @@ fn a_field_strength_drive_replaces_the_authored_strength() {
     sun.physics.rigid_body = RigidBody::Static;
     sun.field = Some(FieldSource::default());
     let sun = spawn_body(&mut app, sun);
-    let probe = spawn_body(&mut app, box_record(Vec2::new(3.0, 0.0), 0.2, 0.2));
     param(&mut app, "off", 0.0);
     bind(&mut app, "dim", "off", SignalSink::FieldStrength(sun));
     step(&mut app, 2);
-    let entity = entity_of(&app, probe).unwrap();
-    app.world_mut()
-        .entity_mut(entity)
-        .insert(LinearVelocity(Vec2::ZERO));
+    assert!(drive_of(&app, sun).is_some(), "the drive is on");
+    // The probe arrives once the drive holds, at rest: no write of its
+    // velocity (avian can restore its solver's value over a direct write,
+    // which made an older version of this test flaky).
+    let probe = spawn_body(&mut app, box_record(Vec2::new(3.0, 0.0), 0.2, 0.2));
     step(&mut app, 30);
     let v = velocity(&app, probe);
     assert!(v.length() < 1e-3, "a zero strength pulls nothing ({v})");

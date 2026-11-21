@@ -14,7 +14,7 @@
 
 use crate::ports;
 use crate::widgets;
-use crate::widgets::{Commit, precise_drag, precise_drag_unit};
+use crate::widgets::{Commit, precise_drag, precise_drag_clamped, precise_drag_unit};
 use avian2d::prelude::*;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
@@ -59,6 +59,7 @@ pub struct BodyProps<'w, 's> {
     field_q: Query<'w, 's, &'static gradiance_domain::field::FieldSource, With<Body>>,
     tracer_q: Query<'w, 's, &'static gradiance_domain::tracer::Tracer, With<Body>>,
     fluid_q: Query<'w, 's, &'static gradiance_domain::fluid::Fluid, With<Body>>,
+    motion_q: Query<'w, 's, &'static gradiance_domain::motion::InitialMotion, With<Body>>,
     friction_q: Query<'w, 's, &'static Friction, With<Body>>,
     restitution_q: Query<'w, 's, &'static Restitution, With<Body>>,
     density_q: Query<'w, 's, &'static ColliderDensity, With<Body>>,
@@ -338,6 +339,138 @@ pub fn physics_section(ui: &mut egui::Ui, selection: &Selection, props: &mut Bod
     field_block(ui, selection, props, primary);
     fluid_block(ui, selection, props, primary);
     tracer_block(ui, selection, props, primary);
+    motion_block(ui, selection, props, primary);
+}
+
+/// The starting-motion editor (brief S-1): a direction dial and the speed,
+/// direction and spin a body starts each run with. Edit seam: one undo step
+/// per gesture (a dial drag commits on release).
+fn motion_block(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProps, primary: Entity) {
+    use gradiance_domain::motion::InitialMotion;
+    let current = props
+        .motion_q
+        .get(primary)
+        .ok()
+        .copied()
+        .unwrap_or_default();
+    let v = current.velocity.value();
+    let mut speed = v.length();
+    // The aim while a dial drag is live, so a zero speed still has one.
+    let aim_id = ui.id().with("motion-aim");
+    let mut angle_deg = ui.data(|d| d.get_temp::<f32>(aim_id)).unwrap_or_else(|| {
+        if speed > 0.0 {
+            v.y.atan2(v.x).to_degrees()
+        } else {
+            0.0
+        }
+    });
+    ui.label(egui::RichText::new("Starting motion").weak())
+        .on_hover_text("the velocity and spin this body starts a run with (not on resume)");
+    ui.horizontal(|ui| {
+        let (changed, finished) = crate::settings::direction_dial(
+            ui,
+            &mut angle_deg,
+            speed,
+            "drag to aim the starting velocity",
+        );
+        if changed {
+            ui.data_mut(|d| d.insert_temp(aim_id, angle_deg));
+        }
+        if finished {
+            ui.data_mut(|d| d.remove::<f32>(aim_id));
+            let dir = Vec2::from_angle(angle_deg.to_radians());
+            commit_motion(selection, props, move |m| InitialMotion {
+                velocity: gradiance_units::Velocity2(dir * m.velocity.value().length()),
+                ..m
+            });
+        }
+        ui.vertical(|ui| {
+            ui.horizontal(|ui| {
+                ui.label("speed");
+                if let Commit::Done(_, new) = precise_drag_unit(
+                    ui,
+                    ui.id().with("motion-speed"),
+                    &mut speed,
+                    0.0,
+                    0.05,
+                    Dimension::Velocity,
+                ) {
+                    let dir = Vec2::from_angle(angle_deg.to_radians());
+                    let speed = new.max(0.0);
+                    commit_motion(selection, props, move |m| InitialMotion {
+                        velocity: gradiance_units::Velocity2(dir * speed),
+                        ..m
+                    });
+                }
+            });
+            ui.horizontal(|ui| {
+                ui.label("direction")
+                    .on_hover_text("counter-clockwise from +x; straight up is 90 degrees");
+                let mut angle = angle_deg.to_radians();
+                if let Commit::Done(_, new) = precise_drag_clamped(
+                    ui,
+                    ui.id().with("motion-direction"),
+                    &mut angle,
+                    0.0,
+                    0.01,
+                    -core::f32::consts::PI..=core::f32::consts::PI,
+                    Dimension::Angle,
+                ) {
+                    let dir = Vec2::from_angle(new);
+                    commit_motion(selection, props, move |m| InitialMotion {
+                        velocity: gradiance_units::Velocity2(dir * m.velocity.value().length()),
+                        ..m
+                    });
+                }
+            });
+            ui.horizontal(|ui| {
+                ui.label("spin");
+                let mut spin = current.spin.value();
+                if let Commit::Done(_, new) = precise_drag_unit(
+                    ui,
+                    ui.id().with("motion-spin"),
+                    &mut spin,
+                    0.0,
+                    0.05,
+                    Dimension::AngularVelocity,
+                ) {
+                    commit_motion(selection, props, move |m| InitialMotion {
+                        spin: gradiance_units::AngularVelocity(new),
+                        ..m
+                    });
+                }
+            });
+        });
+    });
+}
+
+/// Commits one batched initial-motion edit across the selection: each
+/// target's new motion is `make_new` of its own (at rest when it has none);
+/// a motion at rest is stored as none.
+fn commit_motion(
+    selection: &Selection,
+    props: &mut BodyProps,
+    make_new: impl Fn(
+        gradiance_domain::motion::InitialMotion,
+    ) -> gradiance_domain::motion::InitialMotion,
+) {
+    let changes: Vec<PropertyChange> = selection
+        .iter()
+        .filter_map(|e| {
+            let id = props.ids.get(e).ok().copied()?;
+            let old = props.motion_q.get(e).ok().copied();
+            let next = make_new(old.unwrap_or_default()).sanitized();
+            let new = (!next.is_rest()).then_some(next);
+            (new != old).then_some(PropertyChange {
+                id,
+                old: PropertyValue::InitialMotion(old),
+                new: PropertyValue::InitialMotion(new),
+            })
+        })
+        .collect();
+    if !changes.is_empty() {
+        props.edits.write(PropertyEditIntent { changes });
+    }
 }
 
 /// The fluid editor (buoyancy, brief N-7): enable toggle, fluid density and

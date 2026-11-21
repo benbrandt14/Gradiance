@@ -428,6 +428,19 @@ fn air_section(ui: &mut egui::Ui, sim: &mut SimSettings, defaults: &SimSettings)
 /// A gravity-direction dial: the handle's angle is the gravity direction.
 /// Click or drag on it to aim. Returns whether the angle moved.
 fn gravity_dial(ui: &mut egui::Ui, angle_deg: &mut f32, magnitude: f32) -> bool {
+    direction_dial(ui, angle_deg, magnitude, "drag to aim gravity").0
+}
+
+/// A direction dial: drag or click to aim; the arrow shows `angle_deg`
+/// (counter-clockwise from +x, world y up), a dot when `magnitude` is 0.
+/// Returns `(changed, finished)`: whether the angle moved this frame and
+/// whether the gesture ended (the edit seam commits once, on `finished`).
+pub(crate) fn direction_dial(
+    ui: &mut egui::Ui,
+    angle_deg: &mut f32,
+    magnitude: f32,
+    hover: &str,
+) -> (bool, bool) {
     const RADIUS: f32 = 32.0;
     let (rect, response) = ui.allocate_exact_size(
         egui::vec2(RADIUS * 2.2, RADIUS * 2.2),
@@ -457,8 +470,9 @@ fn gravity_dial(ui: &mut egui::Ui, angle_deg: &mut f32, magnitude: f32) -> bool 
         tokens.muted
     };
     painter.arrow(center, dir * RADIUS, egui::Stroke::new(2.0, color));
-    response.on_hover_text("drag to aim gravity");
-    changed
+    let finished = response.drag_stopped() || response.clicked();
+    response.on_hover_text(hover);
+    (changed, finished)
 }
 
 /// The Camera tab: camera feel (workstation config — saved with the scene,

@@ -2,11 +2,9 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-21 (Phase Q worked through in one session on branch
-`claude/jolly-noether-su0a6h`, one stacked branch for Q-2..Q-8, no PR yet:
-Q-2, Q-3, Q-4, Q-5, Q-6, Q-8 done; Q-7 returned (avian cause, ignored
-repro); before that gizmo polish merged, #304; before that Q-1 done; the
-earlier history is in git).
+Last updated: 2026-11-21 (Phase S under way: S-1 merged as #306, roadmap,
+audit and phase plan aligned; Q-9 closed as not reproducible on main `8f7c547`; Phase Q merged
+as #305; earlier history in git).
 
 ## Position
 
@@ -28,23 +26,19 @@ earlier history is in git).
   the external UI project). Every new canvas brief names its feel row in
   `docs/interaction-feel.md` (Algodoo play, Blender commands, Illustrator
   drawing, CAD measuring).
-- **Now:** **Phase Q (follow-ups)** is worked through on
-  `claude/jolly-noether-su0a6h` (PR #305; fmt, clippy, doc and the full `cargo test --workspace` green locally, CI not yet run;
-  the owner opens or asks for the PR). Each brief's Outcome is filled:
-  **Q-2** `bind`/`unbind` operations (done); **Q-3** New keeps the
-  workstation, Mirror rows in the context menu, thinned chain paths (done);
-  **Q-4** laser block, Add to node editor for joints and nodes, target from
-  the selection, free laser names (done; reviewed on lavapipe);
-  **Q-5** fluids act in their depth band, the water surface line, the
-  translucent sea (done; shots on #305, `fluid-surface-look` awaits the
-  owner's verdict); **Q-6** panel drag with aerodynamic torque and angular drag
-  (done; two points per edge, not one, see Outcome); **Q-7** returned: the
-  buzz is avian reporting a standing 1.5 mm joint correction as velocity
-  (ignored repro, `docs/upstream-watch.md`); **Q-8** remainder done
-  (`selection_box` reads `ShapeContours`; P-1 had built the cache).
-  **Next:** proposed **Q-9**
-  (Q-1 Outcome: fills lost after the chain tool), which still needs a
-  brief; then **Phase S** (S-1..S-22, S-4 rejected).
+- **Now:** **Phase S (sandbox parity)**, briefs `docs/briefs/S-*` in number
+  order, one PR per cycle from `claude/jolly-noether-su0a6h`. **S-1**
+  authored initial velocity and spin is done (`InitialMotion`,
+  `set-velocity`/`set-spin`, inspector "Starting motion"; see its Outcome).
+  **Next:** S-2 readouts and XY plots, then S-3, S-5..S-22 in number
+  order (S-4 material presets rejected by the owner, 2026-11-21, #307).
+  **Phase Q is merged (#305):** Q-2..Q-6 and Q-8 done, Q-7 returned (avian
+  reports a standing joint correction as velocity; ignored repro,
+  `docs/upstream-watch.md`). **Q-9** (fills lost after the chain tool, Q-1
+  Outcome) does **not reproduce** on main `8f7c547`: on lavapipe, laying a
+  chain across a ground, a box and a circle leaves all three filled
+  (2026-11-21); no brief written. `fluid-surface-look` awaits the owner's
+  verdict on the #305 shots.
   **Before that:** **G-1 the graph IR crate is done** (merged #297, on the G-0
   decision #296): the new pure
   crate `gradiance-graph` (`graph → core, domain`; DAG row and serde
@@ -326,8 +320,9 @@ earlier history is in git).
       (done, #300); **J-1** joint stress test (done, #290), **J-2**
       cut/select/boolean stress test (done, #293).
   12. **Phase Q** (follow-ups, owner choice 2026-11-20): **Q-1** .. **Q-8**
-      (`docs/briefs/Q-*`), in order. **Phase S** sandbox parity (audit
-      `docs/parity-audit.md`, briefs S-1..S-22, S-4 rejected) follows Phase Q.
+      (done, #305; Q-7 returned to upstream, Q-9 not reproducible).
+      **Phase S** sandbox parity (audit `docs/parity-audit.md`, briefs
+      S-1..S-22, S-4 rejected): **S-1** done (#306), **S-2** next.
   12b. **VectorCraft port** (planned 2026-11-21, owner direction; roadmap
       § "Unified plan"): **C-1..C-6**, **E-1..E-7**, **H-1..H-3**,
       **T-0..T-5**, then the G track below, then **B-0..B-4** (B-1 =
@@ -473,6 +468,14 @@ feature is different: it gets a brief, as 2-5 and 4-4 did.
 - Stale branches without PRs: left alone; prune at a gate if unclaimed.
 
 ## Known hazards
+
+- **A direct velocity write can be undone by avian** (2026-11-21):
+  inserting `LinearVelocity` on a moving body between frames is sometimes
+  restored from the solver's value on the next step, so a test that "stops"
+  a body that way is flaky under load
+  (`actuators::a_field_strength_drive_replaces_the_authored_strength` was;
+  it now spawns its probe at rest instead). Start bodies at rest, or use
+  `InitialMotion` (S-1).
 
 - **Shaders fail at run time, not at build time** (D-1): after a shader
   edit, start the app and search the log for `failed to create shader

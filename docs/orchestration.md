@@ -276,7 +276,7 @@ most visible first (roadmap § "Follow-ups"; the order list is in
 `docs/state.md`). Q-1 screenshots
 Phase N on screen; Q-2..Q-6 close follow-ups from the N/6/J Outcomes;
 Q-7 investigates, Q-8 derives. G-2 and the rest of the G track wait
-until Phase Q is done.
+until Phase Q is done. *Done* (#305, #306): Q-7 returned to upstream, Q-9 not reproducible.
 
 **Phase S — sandbox parity (audit 2026-11-20).** Gaps from
 `docs/parity-audit.md`, briefs S-1..S-22 in number order, S-4 rejected
