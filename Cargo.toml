@@ -44,7 +44,7 @@ lyon = "1.0"
 glam = { version = "0.33", features = ["serde"] }
 
 # Identity + persistence
-uuid = { version = "1", features = ["v4", "serde"] }
+uuid = { version = "1", features = ["v4", "v7", "serde"] }
 serde = { version = "1", features = ["derive"] }
 ron = "0.12"
 # JSON values for the remote control surface (`script::remote`, BRP). Same

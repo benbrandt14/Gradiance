@@ -108,8 +108,9 @@ across and ±3.5 m up and down); angles are radians.
 (spawn-circle x y r)         ; a circle centred at (x, y) → its handle
 (spawn-ground x y angle)     ; a fixed ground half-plane → its handle
 (spawn-box-rot x y w h angle) ; spawn-box, rotated by angle radians
-(cut ax ay bx by width)      ; sever every body crossed by the stroke a→b
-(delete i)                   ; delete the i-th body (id order, as body-x)
+(cut ax ay bx by width)      ; cut every body the stroke a→b passes through
+(delete i)                   ; delete the i-th body (id order, as body-x;
+                             ; ids are minted in creation order)
 (undo) (redo)                ; walk the command stack — Edit ▸ Undo/Redo as ops
 (last-op)                    ; the operation that made the newest step: {id, params}
 (adjust-last "w" 2.5)        ; set one of its params and run it again in place of

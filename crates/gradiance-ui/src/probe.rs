@@ -11,8 +11,6 @@ use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 use gradiance_core::ids::{IdIndex, StableId};
 use gradiance_domain::Body;
-use gradiance_domain::depth::DepthBand;
-use gradiance_domain::shape::ShapeDef;
 use gradiance_interaction::PointerOverUi;
 use gradiance_interaction::cursor::CursorWorldPos;
 use gradiance_interaction::tools::topmost_body_at;
@@ -105,7 +103,7 @@ pub fn probe_panel(
     mut panel: ResMut<ProbePanel>,
     index: Res<IdIndex>,
     transforms: Query<&Transform, With<Body>>,
-    bodies: Query<(&ShapeDef, &DepthBand), With<Body>>,
+    bodies: gradiance_interaction::tools::HitQuery,
     physics: PhysicsQueries,
     fixed: Res<Time<Fixed>>,
     cursor: Res<CursorWorldPos>,
