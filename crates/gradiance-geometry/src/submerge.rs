@@ -421,7 +421,7 @@ mod tests {
         surface_edges(contours, up).collect()
     }
 
-    fn rect(x0: f32, y0: f32, x1: f32, y1: f32) -> Vec<Vec2> {
+    fn corners(x0: f32, y0: f32, x1: f32, y1: f32) -> Vec<Vec2> {
         vec![
             Vec2::new(x0, y0),
             Vec2::new(x1, y0),
@@ -433,7 +433,7 @@ mod tests {
     #[test]
     fn a_box_pool_has_its_top_edge_as_surface() {
         let pool = Contours {
-            outline: rect(-2.0, -1.0, 2.0, 0.0),
+            outline: corners(-2.0, -1.0, 2.0, 0.0),
             holes: Vec::new(),
         };
         assert_eq!(
@@ -453,7 +453,7 @@ mod tests {
         // counts, its right side (60 degrees off, on the line) counts, the
         // others do not.
         let turn = Vec2::from_angle(std::f32::consts::FRAC_PI_6);
-        let outline: Vec<Vec2> = rect(-1.0, -1.0, 1.0, 1.0)
+        let outline: Vec<Vec2> = corners(-1.0, -1.0, 1.0, 1.0)
             .into_iter()
             .map(|v| turn.rotate(v))
             .collect();
@@ -494,8 +494,8 @@ mod tests {
     fn a_hole_faces_out_of_the_solid() {
         // A pool with an air pocket: the pocket's floor is a surface.
         let pool = Contours {
-            outline: rect(-2.0, -2.0, 2.0, 0.0),
-            holes: vec![rect(-0.5, -1.5, 0.5, -0.5).into_iter().rev().collect()],
+            outline: corners(-2.0, -2.0, 2.0, 0.0),
+            holes: vec![corners(-0.5, -1.5, 0.5, -0.5).into_iter().rev().collect()],
         };
         let found = edges(&pool, Vec2::Y);
         assert_eq!(found.len(), 2, "{found:?}");

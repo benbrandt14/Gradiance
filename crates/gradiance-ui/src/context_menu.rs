@@ -428,6 +428,7 @@ pub fn context_menu(
                     && let Ok((_, kind)) = node_menu.nodes.get(entity)
                 {
                     let kind = kind.clone();
+                    let has_pins = matches!(kind, NodeKind::Thruster(_) | NodeKind::Laser(_));
                     ui.label(egui::RichText::new(format!("Node: {}", kind.label())).strong());
                     // One selected body other than the node: a laser target.
                     let mut others = selected_ids.iter().copied().filter(|id| {
@@ -448,7 +449,7 @@ pub fn context_menu(
                     ui.separator();
                     // A node with signal pins can sit on the node canvas
                     // without a wire (brief Q-4).
-                    if matches!(kind, NodeKind::Thruster(_) | NodeKind::Laser(_))
+                    if has_pins
                         && row(
                             ui,
                             "Add to node editor",
