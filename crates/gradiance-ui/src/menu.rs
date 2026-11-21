@@ -301,8 +301,9 @@ fn edit_menu(
 }
 
 /// Edit ▸ Mirror rows: the label and the operation each invokes on the
-/// selection (brief N-9).
-const MIRROR_ROWS: [(&str, &str); 2] = [
+/// selection (brief N-9); the body context menu reads the same table
+/// (brief Q-3).
+pub(crate) const MIRROR_ROWS: [(&str, &str); 2] = [
     ("Mirror horizontally", "body.mirror_h"),
     ("Mirror vertically", "body.mirror_v"),
 ];

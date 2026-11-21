@@ -93,7 +93,7 @@ pub(crate) fn bodies_of(
 }
 
 /// The one body `target` names; `"selection"` names the primary body.
-pub(crate) fn body_of<'s>(
+pub fn body_of<'s>(
     ctx: &OpContext,
     scene: &'s SceneSnapshot,
     target: &Target,
@@ -135,7 +135,7 @@ pub fn body_set(
 /// The joint `target` names: an index in id order, an id that exists, or the
 /// selected joint. A point names no joint (the snapshot has no joint
 /// geometry).
-pub(crate) fn joint_of(
+pub fn joint_of(
     ctx: &OpContext,
     scene: &SceneSnapshot,
     target: &Target,
@@ -144,6 +144,28 @@ pub(crate) fn joint_of(
         Target::Index(i) => usize::try_from(i).ok().and_then(|i| scene.joint_id(i)),
         Target::Id(id) => scene.joints.contains(&id).then_some(id),
         Target::Selection => ctx.selection()?.joint,
+        Target::At(_) => None,
+    })
+}
+
+/// The behaviour node `target` names: an index in id order, an id that
+/// exists, or the first selected node. A point names no node.
+pub fn node_of(
+    ctx: &OpContext,
+    scene: &SceneSnapshot,
+    target: &Target,
+) -> Result<Option<StableId>, OpError> {
+    Ok(match *target {
+        Target::Index(i) => usize::try_from(i)
+            .ok()
+            .and_then(|i| scene.nodes.get(i).copied()),
+        Target::Id(id) => scene.nodes.contains(&id).then_some(id),
+        Target::Selection => ctx
+            .selection()?
+            .objects
+            .iter()
+            .copied()
+            .find(|id| scene.nodes.contains(id)),
         Target::At(_) => None,
     })
 }
@@ -163,6 +185,8 @@ fn fill_context(world: &mut World, ctx: &mut OpContext) {
         .filter(|last| Some(last.step) == revision);
     ctx.insert(gradiance_op::LastOp(last));
     ctx.insert(gradiance_signal::sample_quantities(world));
+    // The live environment: File ▸ New keeps its workstation half.
+    ctx.insert(gradiance_scene::EnvironmentRecord::capture(world));
     if let Some(settings) = world.get_resource::<SimSettings>() {
         ctx.insert(settings.clone());
     }

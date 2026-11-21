@@ -529,3 +529,36 @@ fn a_tracer_is_placed_only_by_a_click_on_the_canvas() {
     }
     assert_eq!(nodes(&mut app), 1, "a canvas click places one tracer");
 }
+
+/// Two lasers drawn one after the other with the Laser tool take two bus
+/// names, `laser` then `laser2`, so they publish two values (brief Q-4).
+#[test]
+fn two_drawn_lasers_take_two_names() {
+    use gradiance::domain::node::NodeKind;
+    let mut app = windowed_app();
+    app.world_mut()
+        .resource_mut::<NextState<ToolState>>()
+        .set(ToolState::Laser);
+    app.update();
+    for y in [300, 400] {
+        op(
+            &mut app,
+            "ui.drag",
+            json!({"from": [600, y], "to": [700, y], "steps": 4}),
+        )
+        .unwrap_or_else(|e| panic!("{e}"));
+        for _ in 0..10 {
+            app.update();
+        }
+    }
+    let mut q = app.world_mut().query::<&NodeKind>();
+    let mut names: Vec<String> = q
+        .iter(app.world())
+        .filter_map(|kind| match kind {
+            NodeKind::Laser(laser) => Some(laser.name.clone()),
+            _ => None,
+        })
+        .collect();
+    names.sort();
+    assert_eq!(names, ["laser", "laser2"]);
+}

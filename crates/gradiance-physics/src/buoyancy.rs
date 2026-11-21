@@ -28,7 +28,9 @@
 //! one-shot through avian's [`Forces`], never authored, never in undo
 //! records, never saved. Fluids act on dynamic bodies that are not fluids
 //! themselves; a fluid body feels no reaction (it is the medium, usually a
-//! static sensor). Overlapping fluid regions add up.
+//! static sensor). Overlapping fluid regions add up. A fluid acts only on
+//! bodies whose collision memberships share a bit with its own (brief Q-5:
+//! collision layer ≡ visual depth); a sea, like every ground, has them all.
 
 use avian2d::prelude::*;
 use bevy::prelude::*;
@@ -204,6 +206,7 @@ pub fn apply_buoyancy(
             &Position,
             &Rotation,
             Option<&LinearVelocity>,
+            Option<&CollisionLayers>,
         ),
         With<Body>,
     >,
@@ -216,6 +219,7 @@ pub fn apply_buoyancy(
             &ComputedAngularInertia,
             &ComputedCenterOfMass,
             &SubmergeOutline,
+            Option<&CollisionLayers>,
         ),
         (With<Body>, Without<Fluid>),
     >,
@@ -226,7 +230,7 @@ pub fn apply_buoyancy(
     }
     let dt = fixed.timestep().as_secs_f32() * physics.relative_speed();
     let BuoyancyScratch { rings, clip } = &mut *scratch;
-    for (fluid, region, fluid_pos, fluid_rot, flow) in &fluids {
+    for (fluid, region, fluid_pos, fluid_rot, flow, fluid_layers) in &fluids {
         let fluid = fluid.sanitized();
         if fluid.density.value() <= 0.0 || region.0.is_empty() {
             continue;
@@ -239,8 +243,15 @@ pub fn apply_buoyancy(
         };
         let to_world = Vec2::from_angle(fluid_rot.as_radians());
         let to_fluid = Vec2::new(to_world.x, -to_world.y);
-        for (entity, mut forces, rigid_body, mass, inertia, com, outline) in &mut bodies {
-            if !rigid_body.is_dynamic() || outline.0.is_empty() {
+        // A fluid acts on what shares its depth (brief Q-5): collision layer
+        // ≡ visual depth, so a body in front of or behind the pool passes
+        // it by. A sea's layers are all bits, so it holds every band.
+        let fluid_bits = layer_bits(fluid_layers);
+        for (entity, mut forces, rigid_body, mass, inertia, com, outline, layers) in &mut bodies {
+            if !rigid_body.is_dynamic()
+                || outline.0.is_empty()
+                || fluid_bits & layer_bits(layers) == 0
+            {
                 continue;
             }
             // The cheap reject: the body's bounding circle against the
@@ -282,6 +293,11 @@ pub fn apply_buoyancy(
             }
         }
     }
+}
+
+/// A body's collision memberships (all bits before its layers are derived).
+fn layer_bits(layers: Option<&CollisionLayers>) -> u32 {
+    layers.map_or(u32::MAX, |l| l.memberships.0)
 }
 
 #[cfg(test)]

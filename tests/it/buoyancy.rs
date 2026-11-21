@@ -89,6 +89,46 @@ fn a_box_of_half_the_fluid_density_floats_half_submerged() {
     assert!(v < 0.01 && w < 0.01, "settled ({v}, {w})");
 }
 
+/// A fluid acts only in its depth (brief Q-5): the same half-density box
+/// in a band that shares no layer with the pool falls through it at
+/// free-fall acceleration; moved into the pool's band it floats.
+#[test]
+fn a_body_in_another_band_passes_the_pool_by() {
+    use gradiance::domain::depth::DepthBand;
+    let mut app = headless_app();
+    tank(&mut app, 20.0, 6.0, water());
+    let mut record = box_record(Vec2::new(0.0, 0.6), 1.0, 1.0);
+    record.physics.density = avian2d::prelude::ColliderDensity(RHO / 2.0);
+    record.depth = DepthBand::metres(30.0, 40.0);
+    let body = spawn_body(&mut app, record);
+    let start = pose(&app, body).0.y;
+    let frames = 30;
+    step(&mut app, frames);
+    let fallen = start - pose(&app, body).0.y;
+    let g = app
+        .world()
+        .resource::<gradiance::domain::settings::SimSettings>()
+        .gravity
+        .0
+        .length();
+    // Under free fall from rest, d = g t² / 2 (give or take a frame of the
+    // integrator's lag).
+    let t = frames as f32 / 60.0;
+    let free = 0.5 * g * t * t;
+    assert!(
+        fallen > 0.9 * 0.5 * g * (t - 2.0 / 60.0).powi(2) && fallen < free * 1.05,
+        "fell {fallen} m in {t} s; free fall is {free} m"
+    );
+
+    // In the pool's band it floats half submerged (the N-7 case).
+    let mut app = headless_app();
+    tank(&mut app, 20.0, 6.0, water());
+    let body = floater(&mut app, Vec2::new(0.0, 0.6), 1.0, 1.0, RHO / 2.0);
+    step(&mut app, 600);
+    let fraction = 0.5 - pose(&app, body).0.y;
+    assert!((fraction - 0.5).abs() < 0.03 * 0.5, "{fraction}");
+}
+
 /// Other density ratios float at their own waterline: a quarter-density
 /// plank floats a quarter submerged in an open sea (a half-plane fluid).
 #[test]

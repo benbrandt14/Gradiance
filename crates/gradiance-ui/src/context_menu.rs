@@ -429,7 +429,14 @@ pub fn context_menu(
                 {
                     let kind = kind.clone();
                     ui.label(egui::RichText::new(format!("Node: {}", kind.label())).strong());
-                    if let Some(next) = widgets::node_kind_editor(ui, "menu", &kind) {
+                    // One selected body other than the node: a laser target.
+                    let mut others = selected_ids.iter().copied().filter(|id| {
+                        index
+                            .entity(*id)
+                            .is_some_and(|e| node_menu.nodes.get(e).is_err())
+                    });
+                    let pick = others.next().filter(|_| others.next().is_none());
+                    if let Some(next) = widgets::node_kind_editor(ui, "menu", &kind, pick) {
                         props.edits.write(PropertyEditIntent {
                             changes: vec![PropertyChange {
                                 id: node_id,
@@ -439,6 +446,18 @@ pub fn context_menu(
                         });
                     }
                     ui.separator();
+                    // A node with signal pins can sit on the node canvas
+                    // without a wire (brief Q-4).
+                    if matches!(kind, NodeKind::Thruster(_) | NodeKind::Laser(_))
+                        && row(
+                            ui,
+                            "Add to node editor",
+                            "place this node's block on the node graph canvas",
+                        )
+                    {
+                        writers.node_graph.add(node_id);
+                        close = true;
+                    }
                     if row(ui, "Delete node", "") {
                         writers.invoke.write(InvokeOp::with(
                             "body.delete",
@@ -478,6 +497,14 @@ pub fn context_menu(
                                 new: PropertyValue::Joint(new),
                             }],
                         });
+                        close = true;
+                    }
+                    if row(
+                        ui,
+                        "Add to node editor",
+                        "place this joint's block on the node graph canvas",
+                    ) {
+                        writers.node_graph.add(joint_id);
                         close = true;
                     }
                     if row(ui, "Delete joint", "") {
@@ -623,6 +650,15 @@ pub fn context_menu(
                             id,
                             json!({"a": "selection", "b": "selection"}),
                         ));
+                        close = true;
+                    }
+                }
+                // Mirror, from the Edit menu's table (brief Q-3; no key).
+                for (label, id) in crate::menu::MIRROR_ROWS {
+                    if row_enabled(ui, label, "", !selected_ids.is_empty()) {
+                        writers
+                            .invoke
+                            .write(InvokeOp::with(id, json!({"targets": ["selection"]})));
                         close = true;
                     }
                 }

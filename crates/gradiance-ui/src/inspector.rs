@@ -869,7 +869,14 @@ fn inspector_body(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProp
         .zip(props.node_kinds.get(primary).ok().cloned())
     {
         ui.label(egui::RichText::new(format!("Node: {}", kind.label())).strong());
-        if let Some(next) = widgets::node_kind_editor(ui, "inspector", &kind) {
+        // The one other selected object that is not a node: a body a laser
+        // can aim at (brief Q-4).
+        let mut others = selection
+            .iter()
+            .filter(|e| *e != primary && props.node_kinds.get(*e).is_err())
+            .filter_map(|e| props.ids.get(e).ok().copied());
+        let pick = others.next().filter(|_| others.next().is_none());
+        if let Some(next) = widgets::node_kind_editor(ui, "inspector", &kind, pick) {
             props.edits.write(PropertyEditIntent {
                 changes: vec![PropertyChange {
                     id,

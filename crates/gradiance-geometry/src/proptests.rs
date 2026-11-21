@@ -830,6 +830,27 @@ proptest! {
         }
     }
 
+    /// For a body that does not spin, the drag panels facing a flow present
+    /// the same width as the width profile (brief Q-6): at every sample
+    /// direction, over random point sets (their hulls).
+    ///
+    /// Tolerance: `1e-4 · (1 + width)` (sums of `f32` products).
+    #[test]
+    fn the_drag_panels_present_the_profile_width(
+        points in proptest::collection::vec((-10f32..10.0, -10f32..10.0), 3..40),
+    ) {
+        let points: Vec<Vec2> = points.into_iter().map(|(x, y)| Vec2::new(x, y)).collect();
+        let profile = WidthProfile::from_points(&points);
+        let panels = crate::profile::DragPanels::from_points(&points);
+        if !panels.panels().is_empty() {
+            for k in 0..crate::profile::PROFILE_SAMPLES {
+                let d = Vec2::from_angle(PI * k as f32 / crate::profile::PROFILE_SAMPLES as f32);
+                let (a, b) = (panels.facing_width(d), profile.width_across(d));
+                prop_assert!((a - b).abs() <= 1e-4 * (1.0 + b), "{k}: {a} vs {b}");
+            }
+        }
+    }
+
     /// Any point set, including an empty one, gives a profile with no
     /// negative or non-finite width.
     #[test]

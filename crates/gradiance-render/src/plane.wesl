@@ -158,7 +158,9 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     // the surface reads as unbounded and never shows the quad edge.
     let dist = length(in.world_position.xyz - eye);
     let fog = smoothstep(fade.data.y, fade.data.z, dist);
-    out.color = vec4(mix(traced, horizon.color.rgb, fog), 1.0);
+    // Opaque grounds have alpha 1; a sea (brief Q-5) keeps its material's
+    // translucency up close and turns opaque into the horizon fog.
+    out.color = vec4(mix(traced, horizon.color.rgb, fog), mix(out.color.a, 1.0, fog));
 
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);
     return out;

@@ -5,9 +5,9 @@ use bevy::prelude::*;
 use gradiance_domain::Body;
 use gradiance_domain::depth::DepthBand;
 use gradiance_domain::shape::ShapeDef;
-use gradiance_geometry::profile::WidthProfile;
+use gradiance_geometry::profile::DragPanels;
 
-use crate::air::AirProfile;
+use crate::air::AirPanels;
 use crate::buoyancy::SubmergeOutline;
 use gradiance_geometry::contours::Contours;
 use gradiance_geometry::polygonize::ShapeContours;
@@ -85,19 +85,19 @@ fn decomposition_collider<'a>(rings: impl Iterator<Item = &'a Vec<Vec2>>) -> Opt
 /// circle keeps some 50 vertices rather than hundreds.
 const DECIMATE_FRACTION: f32 = 1e-3;
 
-/// The projected-width profile air drag reads ([`AirProfile`], brief N-4),
-/// from the same discretization the collider uses: a leaf's polygonized
-/// outline, every component's outline for a CSG tree (as its collider
-/// covers every component). A half-plane is infinite and gets no width.
-fn air_profile_for(shape: &ShapeDef, components: &[Contours]) -> WidthProfile {
+/// The drag panels air drag reads ([`AirPanels`], briefs N-4, Q-6), from
+/// the same discretization the collider uses: the convex hull of a leaf's
+/// polygonized outline, of every component's outline for a CSG tree (as its
+/// collider covers every component). A half-plane is infinite and gets none.
+fn air_panels_for(shape: &ShapeDef, components: &[Contours]) -> DragPanels {
     if shape.contains_half_plane() {
-        return WidthProfile::ZERO;
+        return DragPanels::NONE;
     }
     let points: Vec<Vec2> = components
         .iter()
         .flat_map(|c| c.outline.iter().copied())
         .collect();
-    WidthProfile::from_points(&points)
+    DragPanels::from_points(&points)
 }
 
 /// The outline buoyancy clips ([`SubmergeOutline`], brief N-7), from the
@@ -121,7 +121,7 @@ fn wake_if_movable(commands: &mut Commands, entity: Entity, kind: RigidBody) {
 }
 
 /// Regenerates colliders — and the other shape-derived physics data, the
-/// air-drag width profile, the buoyancy outline and the cached
+/// air-drag panels, the buoyancy outline and the cached
 /// [`ShapeContours`] every per-frame polygon consumer reads — for bodies
 /// whose shape changed. The shape is polygonized once for all of them.
 pub fn sync_colliders(
@@ -134,7 +134,7 @@ pub fn sync_colliders(
             Some(collider) => {
                 commands.entity(entity).insert((
                     collider,
-                    AirProfile(air_profile_for(shape, &contours)),
+                    AirPanels(air_panels_for(shape, &contours)),
                     SubmergeOutline(submerge_outline_for(shape, &contours)),
                     contours,
                 ));

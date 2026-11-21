@@ -14,7 +14,8 @@ use gradiance_domain::Body;
 use gradiance_domain::settings::RenderSettings;
 use gradiance_domain::shape::ShapeDef;
 use gradiance_domain::theme::active;
-use gradiance_geometry::polygonize::polygonize;
+use gradiance_geometry::contours::Contours;
+use gradiance_geometry::polygonize::{ShapeContours, polygonize};
 
 /// Which coordinate system the selection box (and thus scaling) uses.
 #[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]
@@ -109,6 +110,7 @@ pub fn selection_box(
     selection: &Selection,
     frame: ScaleFrame,
     bodies: &Query<(&ShapeDef, &Transform), With<Body>>,
+    contours: &Query<&ShapeContours, With<Body>>,
 ) -> Option<SelectionBox> {
     let rot = match frame {
         ScaleFrame::Global => 0.0,
@@ -131,7 +133,16 @@ pub fn selection_box(
             continue;
         }
         let affine = transform.compute_affine();
-        for ring in polygonize(shape).rings() {
+        // The cached contours (brief Q-8: no per-frame contour); the frame a
+        // body spawns, before its contours are derived, contours it once.
+        let fresh;
+        let components: &[Contours] = if let Ok(cached) = contours.get(entity) {
+            cached
+        } else {
+            fresh = [polygonize(shape)];
+            &fresh
+        };
+        for ring in components.iter().flat_map(Contours::rings) {
             for v in ring {
                 let w = affine.transform_point3(v.extend(0.0)).truncate();
                 let f = inv.rotate(w);
@@ -182,12 +193,13 @@ pub fn draw_handles(
     keys: Res<ButtonInput<KeyCode>>,
     keyboard_captured: Res<crate::KeyboardCaptured>,
     bodies: Query<(&ShapeDef, &Transform), With<Body>>,
+    contours: Query<&ShapeContours, With<Body>>,
     cam_scale: Res<crate::camera::CameraScale>,
     settings: Option<Res<RenderSettings>>,
     mut gizmos: Gizmos<OverlayGizmos>,
 ) {
     let ink = &active(settings.as_deref()).ink;
-    let Some(sbox) = selection_box(&selection, *frame, &bodies) else {
+    let Some(sbox) = selection_box(&selection, *frame, &bodies, &contours) else {
         return;
     };
     let scale = cam_scale.0;

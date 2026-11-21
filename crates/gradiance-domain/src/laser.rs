@@ -43,6 +43,19 @@ pub const DEFAULT_NAME: &str = "laser";
 /// The suffix of a laser's distance signal (`<name>.distance`).
 pub const DISTANCE_SUFFIX: &str = ".distance";
 
+/// The first of `laser`, `laser2`, `laser3`, … that no name in `taken` is
+/// (brief Q-4): a new laser drawn with the tool publishes its own values.
+pub fn free_name<'a>(taken: impl IntoIterator<Item = &'a str>) -> String {
+    let taken: Vec<&str> = taken.into_iter().collect();
+    if !taken.contains(&DEFAULT_NAME) {
+        return DEFAULT_NAME.to_owned();
+    }
+    (2_u32..)
+        .map(|n| format!("{DEFAULT_NAME}{n}"))
+        .find(|name| !taken.contains(&name.as_str()))
+        .unwrap_or_else(|| DEFAULT_NAME.to_owned())
+}
+
 /// An authored laser: its axis, reach, bounce limit, target and bus name.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Reflect)]
 pub struct Laser {
@@ -102,6 +115,14 @@ impl Laser {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_new_laser_takes_the_first_free_name() {
+        assert_eq!(free_name([]), "laser");
+        assert_eq!(free_name(["gate"]), "laser");
+        assert_eq!(free_name(["laser"]), "laser2");
+        assert_eq!(free_name(["laser", "laser2", "laser4"]), "laser3");
+    }
 
     #[test]
     fn the_bus_names_follow_the_name() {

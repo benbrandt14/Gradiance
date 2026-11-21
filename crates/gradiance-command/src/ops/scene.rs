@@ -70,7 +70,9 @@ impl Operation for Redo {
 }
 
 /// Replace the scene with an empty one: one undo step, as File ▸ New scene
-/// takes. The environment (gravity, render style, …) returns to its defaults.
+/// takes. The scene-content settings (gravity, render style, …) return to
+/// their defaults; the workstation config (grid, snap, camera feel, saved
+/// workspaces) is the person's and stays as it is (brief Q-3).
 #[derive(Debug, Deserialize, Reflect)]
 #[serde(deny_unknown_fields)]
 pub struct NewScene {}
@@ -79,7 +81,7 @@ impl Operation for NewScene {
     const META: OpMeta = OpMeta {
         id: "scene.new",
         lisp: "new-scene",
-        doc: "Replace the scene with an empty one (default environment) — one undo step, as File ▸ New scene.",
+        doc: "Replace the scene with an empty one (default gravity, look and signals; your grid, snap, camera and workspaces stay) — one undo step, as File ▸ New scene.",
         seam: Seam::Edit,
         menu: Some("File/New scene"),
         chord: None,
@@ -87,10 +89,12 @@ impl Operation for NewScene {
         example: "{}",
     };
 
-    fn lower(self, _ctx: &OpContext) -> Result<OpOutput, OpError> {
-        Ok(OpOutput::none().message(LoadSceneIntent {
-            scene: empty_scene(),
-        }))
+    fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
+        let mut scene = empty_scene();
+        let mut environment = ctx.get::<EnvironmentRecord>()?.clone();
+        environment.set_scene_content(&scene.environment);
+        scene.environment = environment;
+        Ok(OpOutput::none().message(LoadSceneIntent { scene }))
     }
 }
 
