@@ -1,7 +1,7 @@
 # A derived contour per body
 Phase Q (follow-ups) · N-6 Outcome, "Learned": "body borders re-contour
 every body every frame … a per-body derived `Contours` cache would remove
-the per-frame cost for every CSG body" · status: after Q-7
+the per-frame cost for every CSG body" · status: done
 
 Written by the planning thread, 2026-11-20, on `523ed82`.
 
@@ -86,4 +86,21 @@ discretization point: the cache stores its output.
 
 ## Outcome
 
-To be filled by the worker at handoff.
+Done (2026-11-21); most of it had already landed in P-1 (#300).
+
+- P-1 added the cache this brief asks for: `geometry::polygonize::ShapeContours`,
+  built in `sync_colliders` from the components it already computes, and
+  read by borders, the selection outline, snapping and the debug overlay.
+  This brief moved the one remaining per-frame contour of live bodies:
+  `tools::handles::selection_box` (the scale handles and the select tool's
+  box) now reads `ShapeContours`. It contours once only on the frame a body
+  spawns, before its cache exists. It now spans every component (it used to
+  use the largest one only).
+- Left as they are: gesture ghosts (`select.rs` previews of copied shapes),
+  `extrude_sync` (change-driven mesh rebuild), `fields::sync_field_mass`
+  (change-driven), `pack.rs` (once per run), `array_tool` (during a
+  gesture).
+- Test: `tests/it/contour_cache.rs` (the cache equals
+  `polygonize_components` after spawn, scale, cut and merge; never saved).
+- No frame-time measurement: the remaining change only affects scenes with
+  a selection. P-1 measured the main win.

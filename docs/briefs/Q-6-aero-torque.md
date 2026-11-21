@@ -1,6 +1,6 @@
 # Aerodynamic torque and angular drag
 Phase Q (follow-ups) · N-4 Outcome "no aerodynamic torque or angular drag
-(a plate keeps its attitude)" · status: after Q-5
+(a plate keeps its attitude)" · status: done
 
 Written by the planning thread, 2026-11-20, on `523ed82`.
 
@@ -91,4 +91,31 @@ lift, which is out of scope.
 
 ## Outcome
 
-To be filled by the worker at handoff.
+Done (2026-11-21).
+
+- `geometry::profile::DragPanels` (≤ `MAX_PANELS` = 64 convex-hull edges:
+  midpoint, outward normal, length; a longer hull keeps an evenly spaced
+  vertex subset). `facing_width` equals `WidthProfile::width_across` at
+  every sample direction (unit test, plus a proptest beside 6-2's).
+- `physics::air`: `AirPanels` **replaces** `AirProfile` (nothing else
+  read it; `WidthProfile` stays in geometry for the width law and its
+  tests). `DragLaw::load(panels, AirMotion, dt) -> (force, torque)` is
+  applied with `apply_force` + `apply_torque`. The force is capped as
+  before. A torque that *opposes* the spin is capped at `I|ω|/dt`; a
+  turning torque is not capped (with `ω = 0` the brief's cap would forbid
+  any weathervane torque).
+- **Deviation from the brief's quadrature:** each edge is evaluated at
+  **two** half-edge midpoints, not one. At an edge midpoint a spinning
+  round body only sees tangential air, so the one-point law gives a disc
+  zero angular drag and `a_spinning_disc_slows_in_still_air` could not
+  pass. For a still body both halves see the same air, so the force is
+  unchanged (unit test against `force` at 64 angles).
+- Tests: the seven N-4 tests pass (the profile test now reads
+  `AirPanels::facing_width`). New: `a_dart_turns_nose_first`,
+  `a_spinning_disc_slows_in_still_air`, `drag_still_off_by_default`, and
+  unit tests for zero torque on symmetric bodies, the nose-down torque sign
+  and the spin cap.
+- **Learned:** the dart (2 m shaft, 0.25 m disc at the nose) settles
+  **12.4°** off vertical and stays there, not 10°. Pressure-only panels
+  (no lift, no skin friction) balance the disc's leading arc against the
+  shaft's side at that angle. The test asserts < 15° with that note.

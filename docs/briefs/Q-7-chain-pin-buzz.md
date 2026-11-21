@@ -1,7 +1,7 @@
 # Chain link buzz next to a world pin
 Phase Q (follow-ups) · N-5 Outcome, "Learned": "a hanging chain at rest
 keeps a small solver buzz in one link next to a world pin (about 0.4 m/s at
-its centre)" · status: after Q-6
+its centre)" · status: returned
 
 Written by the planning thread, 2026-11-20, on `523ed82`.
 
@@ -87,4 +87,26 @@ write what you found into the Outcome.
 
 ## Outcome
 
-To be filled by the worker at handoff.
+Returned (2026-11-21): the cause is inside avian; documented, not fixed.
+
+Measurements (the N-5 catenary scene, 20 links, linear drag 10, after
+10 s):
+- The buzzing link is the **first link at each world pin**: 0.44 m/s at
+  the left pin, 0.08 m/s at the right. Every other link reads about
+  0.022 m/s.
+- Its pose is **frozen**: position constant to 1e-7 m over 60 frames, yet
+  it reports a steady `LinearVelocity` (−0.357, −0.257) and
+  `AngularVelocity` 1.169 rad/s. The pin hinge stays stretched **1.5 mm**
+  under the hanging chain's weight. This is a standing joint correction
+  that avian reports as velocity, not motion.
+- Ruled out: air drag (drag set to 0 after settling: 0.455 m/s), sleeping
+  (`Sleeping` absent), contacts (`CollidingEntities` empty), the pin as
+  `ChildOf` the joint entity (top-level static pin: identical numbers).
+  N-5 already reported that more substeps do not help.
+
+Kept: `tests/it/chains.rs` `a_settled_chain_has_no_buzzing_link`,
+`#[ignore]` with the reason. Upstream note in `docs/upstream-watch.md`
+§ "Dependency notes". Follow-up for the planner: readouts and plots of
+link speed show the phantom value. A fix would need either avian's joint
+solve to report relaxed velocities, or a Gradiance-side filter of reported
+speed, which would be a decision.

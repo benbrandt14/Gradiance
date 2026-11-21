@@ -95,8 +95,7 @@ const SEA_HALF_SPAN: f32 = 5_000.0;
 pub fn surface_colour(
     fill: gradiance_domain::appearance::Rgba,
 ) -> gradiance_domain::appearance::Rgba {
-    let white = gradiance_domain::appearance::Rgba::rgb(1.0, 1.0, 1.0);
-    let lifted = fill.lerp(white, SURFACE_LIGHTEN);
+    let lifted = fill.lerp(gradiance_domain::theme::FLUID_SURFACE_LIFT, SURFACE_LIGHTEN);
     gradiance_domain::appearance::Rgba { a: 1.0, ..lifted }
 }
 
