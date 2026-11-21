@@ -376,3 +376,407 @@ fn a_body_despawned_while_its_override_is_queued_does_not_panic() {
     assert!(app.world().get_entity(entity).is_err());
     app.update(); // the next ordinary frame is clean too
 }
+
+// --- dragging a node (brief: gizmo polish) ----------------------------
+//
+// A press on a node's glyph selects it; dragging past the deadzone moves
+// it, and the release re-attaches it to the body under the release point
+// or leaves it free on empty canvas — one undoable property edit. The
+// Drag tool gives the same press the same meaning: the node moves, not
+// the body behind it.
+
+use gradiance::command::CommandStack;
+use gradiance::command::intent::SpawnBodyIntent;
+use gradiance::domain::laser::Laser;
+use gradiance::domain::thruster::Thruster;
+use gradiance::interaction::cursor::CursorWorldPos;
+use gradiance::interaction::node_edit::NodeDrag;
+use gradiance::interaction::snap::SnappedCursor;
+
+fn set_cursor(app: &mut App, p: Vec2) {
+    app.world_mut().insert_resource(CursorWorldPos(Some(p)));
+    app.world_mut().insert_resource(SnappedCursor {
+        raw: Some(p),
+        position: Some(p),
+        kind: None,
+    });
+}
+
+fn mouse(app: &mut App, down: bool) {
+    let mut input = app.world_mut().resource_mut::<ButtonInput<MouseButton>>();
+    if down {
+        input.press(MouseButton::Left);
+    } else {
+        input.release(MouseButton::Left);
+    }
+}
+
+fn thruster_record(pos: Vec2, attach: NodeAttachment) -> NodeRecord {
+    let id = StableId::new();
+    NodeRecord {
+        id,
+        pose: PosRot { pos, rot: 0.0 },
+        attachment: attach,
+        kind: NodeKind::Thruster(Thruster::default()),
+        appearance: gradiance::domain::appearance::Appearance::default(),
+    }
+}
+
+/// Drag a thruster off its body onto empty canvas: the node goes with the
+/// gesture (a node rests on a body or not at all), as one undo step that
+/// puts it back where it rode.
+#[test]
+fn dragging_a_node_off_its_body_deletes_it_and_undoes() {
+    let mut app = paused_app();
+    let body = box_record(Vec2::ZERO, 20.0, 20.0);
+    let body_id = body.id;
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: body });
+    app.update();
+    let record = thruster_record(Vec2::ZERO, NodeAttachment::to(body_id, Vec2::ZERO));
+    let node_id = record.id;
+    app.world_mut().write_message(SpawnNodeIntent { record });
+    app.update();
+    let before = app.world().resource::<CommandStack>().undo_len();
+
+    // Press on the node: selected, drag armed, nothing moved yet.
+    set_cursor(&mut app, Vec2::ZERO);
+    mouse(&mut app, true);
+    app.update();
+    let node = entity_of(&app, node_id).unwrap();
+    assert!(
+        app.world().resource::<Selection>().contains(node),
+        "the press selected the node"
+    );
+    assert_eq!(app.world().resource::<NodeDrag>().dragging(), Some(node));
+
+    // Drag it well past the deadzone, onto empty canvas, and release.
+    set_cursor(&mut app, Vec2::new(0.0, 60.0));
+    app.update();
+    // The engage lands at the end of that frame; the preview publishes
+    // from the next one.
+    app.update();
+    assert!(
+        app.world().resource::<NodeDrag>().engaged()
+            && app.world().resource::<NodeDrag>().cursor == Some(Vec2::new(0.0, 60.0)),
+        "the glyph previews at the cursor"
+    );
+    mouse(&mut app, false);
+    app.update();
+
+    assert!(
+        entity_of(&app, node_id).is_none(),
+        "nothing under the release: the node went with the gesture"
+    );
+    assert_eq!(
+        app.world().resource::<CommandStack>().undo_len(),
+        before + 1,
+        "one step for the whole gesture"
+    );
+
+    undo(&mut app);
+    let (attachment, pos) = node_placement(&app, node_id);
+    assert_eq!(attachment.target, Some(body_id), "undo restores the ride");
+    assert_eq!(pos, Vec2::ZERO, "and the position");
+}
+
+/// A plain click on a node (no deadzone-crossing drag) selects it and
+/// commits nothing.
+#[test]
+fn clicking_a_node_selects_it_without_moving_it() {
+    let mut app = paused_app();
+    let body = box_record(Vec2::ZERO, 20.0, 20.0);
+    let body_id = body.id;
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: body });
+    app.update();
+    let record = thruster_record(Vec2::ZERO, NodeAttachment::to(body_id, Vec2::ZERO));
+    let node_id = record.id;
+    app.world_mut().write_message(SpawnNodeIntent { record });
+    app.update();
+    let before = app.world().resource::<CommandStack>().undo_len();
+
+    set_cursor(&mut app, Vec2::ZERO);
+    mouse(&mut app, true);
+    app.update();
+    mouse(&mut app, false);
+    app.update();
+
+    let (attachment, pos) = node_placement(&app, node_id);
+    assert_eq!(attachment.target, Some(body_id), "still attached");
+    assert_eq!(pos, Vec2::ZERO, "never nudged");
+    assert_eq!(app.world().resource::<CommandStack>().undo_len(), before);
+}
+
+/// Releasing over another body re-attaches to it, offset in its frame,
+/// with a laser's axis re-expressed so its world aim is unchanged.
+#[test]
+fn releasing_over_a_rotated_body_re_expresses_the_axis() {
+    let mut app = paused_app();
+    let mut rider = box_record(Vec2::new(60.0, 0.0), 20.0, 20.0);
+    rider.physics.rigid_body = avian2d::prelude::RigidBody::Static;
+    rider.pose.rot = 0.5;
+    let rider_id = rider.id;
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: rider });
+    app.update();
+    let mut record = NodeRecord {
+        id: StableId::new(),
+        pose: PosRot {
+            pos: Vec2::ZERO,
+            rot: 0.0,
+        },
+        attachment: NodeAttachment::free(),
+        kind: NodeKind::Laser(Laser::default()),
+        appearance: gradiance::domain::appearance::Appearance::default(),
+    };
+    record.kind = NodeKind::Laser(Laser {
+        angle: gradiance::units::Angle(0.0),
+        ..Laser::default()
+    });
+    let node_id = record.id;
+    app.world_mut().write_message(SpawnNodeIntent { record });
+    app.update();
+
+    // Drag the free laser onto the rotated body's centre.
+    set_cursor(&mut app, Vec2::ZERO);
+    mouse(&mut app, true);
+    app.update();
+    set_cursor(&mut app, Vec2::new(60.0, 0.0));
+    app.update();
+    mouse(&mut app, false);
+    app.update();
+
+    let (attachment, pos) = node_placement(&app, node_id);
+    assert_eq!(
+        attachment.target,
+        Some(rider_id),
+        "re-attached to the rider"
+    );
+    assert_eq!(attachment.offset.value(), Vec2::ZERO, "at its centre");
+    assert_eq!(pos, Vec2::new(60.0, 0.0));
+    let node = entity_of(&app, node_id).unwrap();
+    let NodeKind::Laser(laser) = app.world().get::<NodeKind>(node).unwrap() else {
+        panic!("still a laser");
+    };
+    assert!(
+        (laser.angle.value() + 0.5).abs() < 1e-4,
+        "world aim unchanged: the frame angle cancels the body's 0.5 ({})",
+        laser.angle.value()
+    );
+}
+
+/// The Drag tool moves the node under its press, not the body behind it.
+#[test]
+fn the_drag_tool_moves_the_node_not_the_body_behind_it() {
+    let mut app = paused_app();
+    let body = box_record(Vec2::ZERO, 40.0, 40.0);
+    let body_id = body.id;
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: body });
+    app.update();
+    let record = thruster_record(Vec2::ZERO, NodeAttachment::to(body_id, Vec2::ZERO));
+    let node_id = record.id;
+    app.world_mut().write_message(SpawnNodeIntent { record });
+    app.update();
+    let body_entity = entity_of(&app, body_id).unwrap();
+
+    app.world_mut()
+        .resource_mut::<NextState<ToolState>>()
+        .set(ToolState::Drag);
+    app.update();
+
+    set_cursor(&mut app, Vec2::ZERO);
+    mouse(&mut app, true);
+    app.update();
+    set_cursor(&mut app, Vec2::new(0.0, 80.0));
+    app.update();
+    mouse(&mut app, false);
+    app.update();
+
+    assert!(
+        entity_of(&app, node_id).is_none(),
+        "dragged to empty canvas: the node went with the gesture"
+    );
+    let body_pos = app
+        .world()
+        .get::<Transform>(body_entity)
+        .unwrap()
+        .translation
+        .truncate();
+    assert_eq!(body_pos, Vec2::ZERO, "the body behind it never moved");
+}
+
+/// One node's `(attachment, pose)` as the tests read it.
+fn node_placement(app: &App, id: StableId) -> (NodeAttachment, Vec2) {
+    let node = entity_of(app, id).unwrap();
+    (
+        *app.world().get::<NodeAttachment>(node).unwrap(),
+        app.world()
+            .get::<Transform>(node)
+            .unwrap()
+            .translation
+            .truncate(),
+    )
+}
+
+// --- a node dies with its body, on every path that consumes one ---------
+//
+// The delete command already cascaded; cut and the booleans rewired joints
+// but left a node attached to a despawned body — orphaned, floating where
+// its body used to be. Now every body-consuming path shares the joints'
+// rule: a node moves onto what holds its point, or goes with its material.
+
+use gradiance::command::intent::{BooleanIntent, CutIntent};
+
+fn cut(app: &mut App, a: Vec2, b: Vec2, width: f32) {
+    app.world_mut().write_message(CutIntent { a, b, width });
+    app.update();
+}
+
+fn attachment_of(app: &App, id: StableId) -> NodeAttachment {
+    *app.world()
+        .get::<NodeAttachment>(entity_of(app, id).unwrap())
+        .unwrap()
+}
+
+/// A cut through a thrustered body re-attaches the thruster to the piece
+/// that holds its point; a cut that swallows the point deletes the node.
+#[test]
+fn a_cut_rewires_or_deletes_the_nodes_on_the_body() {
+    let mut app = paused_app();
+    let body = box_record(Vec2::ZERO, 40.0, 40.0);
+    let body_id = body.id;
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: body });
+    app.update();
+    let record = thruster_record(
+        Vec2::new(0.0, 10.0),
+        NodeAttachment::to(body_id, Vec2::new(0.0, 10.0)),
+    );
+    let node_id = record.id;
+    app.world_mut().write_message(SpawnNodeIntent { record });
+    app.update();
+    assert_eq!(node_count(&mut app), 1);
+
+    // Split the box under the thruster: the top half keeps its point.
+    cut(&mut app, Vec2::new(-30.0, 0.0), Vec2::new(30.0, 0.0), 2.0);
+    assert_eq!(node_count(&mut app), 1, "the node survived the split");
+    let moved = attachment_of(&app, node_id);
+    let piece = moved.target.expect("re-attached to a piece");
+    assert_ne!(piece, body_id, "the original body is gone");
+    let piece_shape = app
+        .world()
+        .get::<gradiance::domain::shape::ShapeDef>(entity_of(&app, piece).unwrap())
+        .unwrap()
+        .clone();
+    assert!(
+        gradiance::geometry::sdf::eval(&piece_shape, moved.offset.value()) < 1.0,
+        "the piece contains the node's point (offset {:?})",
+        moved.offset.value()
+    );
+
+    // A strip wide enough to swallow the point: the node goes with it.
+    cut(
+        &mut app,
+        Vec2::new(-30.0, 11.0),
+        Vec2::new(30.0, 11.0),
+        24.0,
+    );
+    assert_eq!(
+        node_count(&mut app),
+        0,
+        "no piece holds the node: deleted with its material"
+    );
+
+    // The snapshot undoes both cuts and the node comes back on its body.
+    undo(&mut app);
+    undo(&mut app);
+    assert_eq!(node_count(&mut app), 1);
+    assert_eq!(
+        attachment_of(&app, node_id).target,
+        Some(body_id),
+        "undo restores the original attachment"
+    );
+}
+
+/// A subtract consumes its tool body: a node on the consumed body moves
+/// onto the host (its axis re-expressed so its world direction never
+/// changes), and a node on the material the subtract removed goes with it.
+#[test]
+fn a_boolean_moves_consumed_nodes_onto_the_host() {
+    let mut app = paused_app();
+    // Host: a box at the origin. Tool: an overlapping box to its right.
+    let host = box_record(Vec2::ZERO, 40.0, 40.0);
+    let host_id = host.id;
+    let mut tool = box_record(Vec2::new(20.0, 0.0), 40.0, 40.0);
+    tool.physics.rigid_body = avian2d::prelude::RigidBody::Static;
+    tool.pose.rot = 0.25;
+    let tool_id = tool.id;
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: host });
+    app.world_mut()
+        .write_message(SpawnBodyIntent { record: tool });
+    app.update();
+
+    // A laser on the tool, far off its material: subtract moves it onto
+    // the host, aiming the same world way (the tool was rotated 0.25).
+    let record = NodeRecord {
+        id: StableId::new(),
+        pose: PosRot {
+            pos: Vec2::new(-10.0, 0.0),
+            rot: 0.0,
+        },
+        attachment: NodeAttachment::to(tool_id, Vec2::new(-30.0, 0.0)),
+        kind: NodeKind::Laser(Laser {
+            angle: gradiance::units::Angle(0.0),
+            ..Laser::default()
+        }),
+        appearance: gradiance::domain::appearance::Appearance::default(),
+    };
+    let node_id = record.id;
+    app.world_mut().write_message(SpawnNodeIntent { record });
+    // A tracer on the tool's own material, inside the subtracted overlap:
+    // the material vanishes, and the tracer with it.
+    let swallowed = tracer_record(
+        Vec2::new(20.0, 0.0),
+        NodeAttachment::to(tool_id, Vec2::ZERO),
+    );
+    let swallowed_id = swallowed.id;
+    app.world_mut()
+        .write_message(SpawnNodeIntent { record: swallowed });
+    app.update();
+
+    app.world_mut().write_message(BooleanIntent {
+        op: gradiance::domain::shape::CsgOp::Subtract,
+        targets: vec![host_id, tool_id],
+    });
+    app.update();
+
+    let moved = attachment_of(&app, node_id);
+    assert_eq!(moved.target, Some(host_id), "the laser rides the host now");
+    let laser = app
+        .world()
+        .get::<NodeKind>(entity_of(&app, node_id).unwrap())
+        .unwrap();
+    let NodeKind::Laser(l) = laser else {
+        panic!("still a laser: {laser:?}");
+    };
+    assert!(
+        (l.angle.value() - 0.25).abs() < 1e-4,
+        "world aim unchanged: the frame angle advanced by the tool's rotation ({})",
+        l.angle.value()
+    );
+    assert!(
+        entity_of(&app, swallowed_id).is_none(),
+        "the tracer on the removed material went with it"
+    );
+
+    undo(&mut app);
+    assert_eq!(
+        attachment_of(&app, node_id).target,
+        Some(tool_id),
+        "undo restores the pre-boolean attachment"
+    );
+    assert!(entity_of(&app, swallowed_id).is_some(), "and the tracer");
+}

@@ -46,6 +46,14 @@ pub enum PropertyValue {
     /// A behavior node's kind (tracer fade, thruster thrust and axis).
     /// Undoable like any prop.
     NodeKind(gradiance_domain::node::NodeKind),
+    /// A behavior node's placement: the attachment (which body it rides,
+    /// at what offset, or free) and its own pose (where a free node sits).
+    /// The pose half is what a free node saves; an attached node's
+    /// transform is re-derived by the follow system either way.
+    NodePlace(
+        gradiance_domain::node::NodeAttachment,
+        gradiance_core::units::PosRot,
+    ),
 }
 
 impl PropertyValue {
@@ -132,6 +140,12 @@ impl PropertyValue {
                     None => {
                         entity_mut.remove::<gradiance_domain::tracer::Tracer>();
                     }
+                }
+            }
+            Self::NodePlace(attachment, pose) => {
+                entity_mut.insert(*attachment);
+                if let Some(mut t) = entity_mut.get_mut::<Transform>() {
+                    pose.apply_to(&mut t);
                 }
             }
         }

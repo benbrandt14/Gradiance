@@ -40,6 +40,39 @@ pub struct NodeAttachment {
     pub offset: Displacement,
 }
 
+impl NodeKind {
+    /// Whether this kind carries an axis in its body's frame (a thruster
+    /// pushes along it, a laser aims along it; a tracer has none).
+    fn has_axis(&self) -> bool {
+        matches!(self, Self::Thruster(_) | Self::Laser(_))
+    }
+
+    /// This payload with its axis re-expressed from a body frame rotated
+    /// `old_rot` into one rotated `new_rot`, so the **world** direction it
+    /// pushes or aims never changes. `None` when nothing changes (a
+    /// tracer has no axis, and equal frames need no turn). The one rule
+    /// every re-parenting shares: a drag that re-attaches, a cut that
+    /// moves a node onto a piece, a merge that consumes its body.
+    #[must_use]
+    pub fn reframe(&self, old_rot: f32, new_rot: f32) -> Option<Self> {
+        if !self.has_axis() || (old_rot - new_rot).abs() < 1e-6 {
+            return None;
+        }
+        let turn = old_rot - new_rot;
+        match self {
+            Self::Thruster(t) => Some(Self::Thruster(crate::thruster::Thruster {
+                angle: gradiance_units::Angle(t.angle.value() + turn),
+                ..*t
+            })),
+            Self::Laser(l) => Some(Self::Laser(crate::laser::Laser {
+                angle: gradiance_units::Angle(l.angle.value() + turn),
+                ..l.clone()
+            })),
+            Self::Tracer(_) => None,
+        }
+    }
+}
+
 impl Default for NodeAttachment {
     fn default() -> Self {
         Self {
@@ -116,5 +149,31 @@ impl NodeKind {
             Self::Tracer(t) => Some(*t),
             Self::Thruster(_) | Self::Laser(_) => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A payload moved into a differently-rotated frame keeps its world
+    /// direction; a tracer or an equal frame changes nothing.
+    #[test]
+    fn a_reframe_keeps_the_world_direction() {
+        let thruster = NodeKind::Thruster(crate::thruster::Thruster::default());
+        let turned = thruster.reframe(0.5, -0.25).unwrap();
+        let NodeKind::Thruster(t) = &turned else {
+            panic!("still a thruster");
+        };
+        assert_eq!(
+            t.angle.value(),
+            crate::thruster::Thruster::default().angle.value() + 0.75
+        );
+
+        // The same frame: nothing to do.
+        assert!(thruster.reframe(0.5, 0.5).is_none());
+        // A tracer has no axis to turn.
+        let tracer = NodeKind::Tracer(crate::tracer::Tracer::default());
+        assert!(tracer.reframe(0.0, 1.0).is_none());
     }
 }

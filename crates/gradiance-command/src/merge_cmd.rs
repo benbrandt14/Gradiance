@@ -44,6 +44,7 @@ use crate::{CommandError, GameCommand, resolve};
 use bevy::prelude::*;
 use gradiance_core::ids::StableId;
 use gradiance_domain::joint::JointDef;
+use gradiance_domain::node::{NodeAttachment, NodeKind};
 use gradiance_domain::shape::{CsgOp, MAX_CSG_DEPTH, ShapeDef};
 use gradiance_geometry::polygonize::polygonize_components;
 use gradiance_geometry::sdf;
@@ -73,6 +74,9 @@ struct Staged {
     /// Joint rewires: old record, and the rewired definition
     /// (`None` = the joint is deleted).
     joint_changes: Vec<(JointRecord, Option<JointDef>)>,
+    /// Node rewires: the live entity, and its new placement with the
+    /// re-expressed axis (`None` = the node is deleted).
+    node_changes: Vec<(Entity, Option<(NodeAttachment, Option<NodeKind>)>)>,
 }
 
 /// What happens to one joint end.
@@ -182,11 +186,13 @@ impl MergeCommand {
 
         let joint_changes =
             boolean_joint_changes(world, &self.targets, &originals, &tree, &outcome);
+        let node_changes = boolean_node_changes(world, &self.targets, &originals, &tree, &outcome);
 
         Ok(Staged {
             originals,
             outcome,
             joint_changes,
+            node_changes,
         })
     }
 }
@@ -203,52 +209,7 @@ fn boolean_joint_changes(
     outcome: &Outcome,
 ) -> Vec<(JointRecord, Option<JointDef>)> {
     let host = &originals[0];
-    let host_inv = Vec2::from_angle(-host.pose.rot);
-    // A target-relative anchor, re-expressed in the host frame.
-    let to_host = |body: StableId, anchor: Vec2| -> Option<Vec2> {
-        let source = originals.iter().find(|r| r.id == body)?;
-        let world_point = source.pose.pos + Vec2::from_angle(source.pose.rot).rotate(anchor);
-        Some(host_inv.rotate(world_point - host.pose.pos))
-    };
-    // Piece centroids in the host frame (empty unless split).
-    let pieces: Vec<(&BodyRecord, Vec2)> = match outcome {
-        Outcome::Split(pieces) => pieces
-            .iter()
-            .map(|p| (p, host_inv.rotate(p.pose.pos - host.pose.pos)))
-            .collect(),
-        Outcome::Reshape(_) => Vec::new(),
-    };
-    let fate = |body: StableId, anchor: Vec2| -> EndFate {
-        let Some(source) = originals.iter().find(|r| r.id == body) else {
-            return EndFate::Keep; // not a target
-        };
-        let Some(local) = to_host(body, anchor) else {
-            return EndFate::Keep;
-        };
-        let consumed = body != host.id;
-        if !pieces.is_empty() {
-            return pieces
-                .iter()
-                .find(|(piece, offset)| shape_contains(&piece.shape, local - *offset))
-                .map_or(EndFate::Drop, |(piece, offset)| EndFate::Move {
-                    body: piece.id,
-                    anchor: local - *offset,
-                    rest_rot: consumed.then_some(host.pose.rot),
-                });
-        }
-        let was_on_material = sdf::eval(&source.shape, anchor) <= ANCHOR_TOLERANCE;
-        if was_on_material && sdf::eval(tree, local) > ANCHOR_TOLERANCE {
-            EndFate::Drop
-        } else if consumed {
-            EndFate::Move {
-                body: host.id,
-                anchor: local,
-                rest_rot: Some(host.pose.rot),
-            }
-        } else {
-            EndFate::Keep
-        }
-    };
+    let pieces = split_pieces(outcome, host);
 
     let in_set = |id: StableId| targets.contains(&id);
     crate::joint_cmd::joints_referencing(world, targets)
@@ -263,7 +224,14 @@ fn boolean_joint_changes(
                 return Some((record, None));
             }
             let mut new = def.clone();
-            match fate(def.body_a, def.anchor_a.value()) {
+            match operand_point_fate(
+                host,
+                originals,
+                tree,
+                &pieces,
+                def.body_a,
+                def.anchor_a.value(),
+            ) {
                 EndFate::Keep => {}
                 EndFate::Drop => return Some((record, None)),
                 EndFate::Move {
@@ -279,7 +247,7 @@ fn boolean_joint_changes(
                 }
             }
             if let Some(b) = def.body_b {
-                match fate(b, def.anchor_b.value()) {
+                match operand_point_fate(host, originals, tree, &pieces, b, def.anchor_b.value()) {
                     EndFate::Keep => {}
                     EndFate::Drop => return Some((record, None)),
                     EndFate::Move {
@@ -300,6 +268,126 @@ fn boolean_joint_changes(
         .collect()
 }
 
+/// The pieces of a split outcome as (record, centroid in the host
+/// frame) — empty unless the host split.
+fn split_pieces<'a>(outcome: &'a Outcome, host: &BodyRecord) -> Vec<(&'a BodyRecord, Vec2)> {
+    let host_inv = Vec2::from_angle(-host.pose.rot);
+    match outcome {
+        Outcome::Split(pieces) => pieces
+            .iter()
+            .map(|p| (p, host_inv.rotate(p.pose.pos - host.pose.pos)))
+            .collect(),
+        Outcome::Reshape(_) => Vec::new(),
+    }
+}
+
+/// Where a point attached to `body` at `anchor` (in `body`'s own frame)
+/// ends up after the boolean — the fate a joint end and a node offset
+/// share: kept where it was, moved onto the host (or the piece that
+/// contains it when the host splits, its `rest_rot` the host's frame),
+/// or dropped with the material that vanished under it. A point on a
+/// body that is not an operand never moves.
+fn operand_point_fate(
+    host: &BodyRecord,
+    originals: &[BodyRecord],
+    tree: &ShapeDef,
+    pieces: &[(&BodyRecord, Vec2)],
+    body: StableId,
+    anchor: Vec2,
+) -> EndFate {
+    let host_inv = Vec2::from_angle(-host.pose.rot);
+    let Some(source) = originals.iter().find(|r| r.id == body) else {
+        return EndFate::Keep; // not a target
+    };
+    let world_point = source.pose.pos + Vec2::from_angle(source.pose.rot).rotate(anchor);
+    let local = host_inv.rotate(world_point - host.pose.pos);
+    let consumed = body != host.id;
+    if !pieces.is_empty() {
+        return pieces
+            .iter()
+            .find(|(piece, offset)| shape_contains(&piece.shape, local - *offset))
+            .map_or(EndFate::Drop, |(piece, offset)| EndFate::Move {
+                body: piece.id,
+                anchor: local - *offset,
+                rest_rot: consumed.then_some(host.pose.rot),
+            });
+    }
+    let was_on_material = sdf::eval(&source.shape, anchor) <= ANCHOR_TOLERANCE;
+    if was_on_material && sdf::eval(tree, local) > ANCHOR_TOLERANCE {
+        EndFate::Drop
+    } else if consumed {
+        EndFate::Move {
+            body: host.id,
+            anchor: local,
+            rest_rot: Some(host.pose.rot),
+        }
+    } else {
+        EndFate::Keep
+    }
+}
+
+/// The node rewires of one boolean — the joints' rule, for nodes: a node
+/// on a consumed operand moves onto the host (or the piece containing it,
+/// when the host splits), its axis re-expressed in the new frame so the
+/// world direction it pushes or aims never changes; a node whose material
+/// was subtracted away goes with it. Nodes that do not change are left
+/// out.
+fn boolean_node_changes(
+    world: &mut World,
+    targets: &[StableId],
+    originals: &[BodyRecord],
+    tree: &ShapeDef,
+    outcome: &Outcome,
+) -> Vec<(Entity, Option<(NodeAttachment, Option<NodeKind>)>)> {
+    let host = &originals[0];
+    let pieces = split_pieces(outcome, host);
+    crate::spawn::nodes_attached(world, targets)
+        .into_iter()
+        .filter_map(|(entity, record)| {
+            let offset = record.attachment.offset.value();
+            let target = record.attachment.target?;
+            let old_rot = originals
+                .iter()
+                .find(|r| r.id == target)
+                .map_or(0.0, |r| r.pose.rot);
+            let new = match operand_point_fate(host, originals, tree, &pieces, target, offset) {
+                EndFate::Keep => return None,
+                EndFate::Drop => None,
+                EndFate::Move { body, anchor, .. } => Some((
+                    NodeAttachment::to(body, anchor),
+                    record.kind.reframe(old_rot, host.pose.rot),
+                )),
+            };
+            Some((entity, new))
+        })
+        .collect()
+}
+
+/// Applies staged node rewires: a placement moves the attachment (and the
+/// axis with it); `None` deletes the node with its material.
+fn apply_node_changes(
+    world: &mut World,
+    changes: &[(Entity, Option<(NodeAttachment, Option<NodeKind>)>)],
+) {
+    for (entity, new) in changes {
+        match new {
+            Some((attachment, kind)) => {
+                if let Some(mut live) = world.get_mut::<NodeAttachment>(*entity) {
+                    *live = *attachment;
+                }
+                if let Some(kind) = kind
+                    && let Some(mut live) = world.get_mut::<NodeKind>(*entity)
+                {
+                    *live = kind.clone();
+                }
+            }
+            None => {
+                world.despawn(*entity);
+            }
+        }
+    }
+}
+
 impl GameCommand for MergeCommand {
     fn apply(&mut self, world: &mut World) -> Result<(), CommandError> {
         let staged = self.stage(world)?;
@@ -318,6 +406,7 @@ impl GameCommand for MergeCommand {
             Outcome::Split(pieces) => replace_with_pieces(world, host, pieces)?,
         }
         apply_joint_changes(world, &staged.joint_changes)?;
+        apply_node_changes(world, &staged.node_changes);
         Ok(())
     }
 

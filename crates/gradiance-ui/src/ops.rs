@@ -278,18 +278,22 @@ pub struct UiDrag {
     pub to: Target,
     /// Frames of movement between them (1–200).
     pub steps: u32,
+    /// `left`, `middle` or `right` (absent: left). A right drag drives the
+    /// right-button gestures — rotate, camera pan, the context menu's
+    /// deadzone — the same way a person's hand does.
+    pub button: Option<String>,
 }
 
 impl Operation for UiDrag {
     const META: OpMeta = OpMeta {
         id: "ui.drag",
         lisp: "ui-drag",
-        doc: "Drag (left button) from one widget name or point [x y] to another in steps frames (1-200): move, press, the steps, release, as real input; a tool commits one step on release.",
+        doc: "Drag from one widget name or point [x y] to another in steps frames (1-200): move, press, the steps, release, as real input; a tool commits one step on release. button (left, middle or right, default left) names the button a right drag uses, driving the right-button gestures (rotate, pan).",
         seam: Seam::Editor,
         menu: None,
         chord: None,
         undo: None,
-        example: r#"{"from": [640, 370], "to": [740, 370], "steps": 10}"#,
+        example: r#"{"from": [640, 370], "to": [740, 370], "steps": 10, "button": "right"}"#,
     };
 
     fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
@@ -299,10 +303,24 @@ impl Operation for UiDrag {
                 self.steps
             )));
         }
+        let button = match self.button.as_deref().map(str::to_ascii_lowercase) {
+            None => MouseButton::Left,
+            Some(name) => match name.as_str() {
+                "left" => MouseButton::Left,
+                "middle" => MouseButton::Middle,
+                "right" => MouseButton::Right,
+                other => {
+                    return Err(OpError::Invalid(format!(
+                        "button `{other}` is not left, middle or right"
+                    )));
+                }
+            },
+        };
         Ok(inject(UiInput::Drag {
             from: self.from.resolve(ctx)?,
             to: self.to.resolve(ctx)?,
             steps: self.steps,
+            button,
         }))
     }
 }

@@ -8,6 +8,7 @@ use crate::harness::{box_record, entity_of, paused_app, undo};
 use bevy::prelude::*;
 use gradiance::command::CommandStack;
 use gradiance::domain::joint::AngularMotorDef;
+use gradiance::interaction::joint_edit::JointAnchorDrag;
 use gradiance::interaction::selection::{SelectedJoint, Selection};
 use gradiance::prelude::*;
 
@@ -344,4 +345,65 @@ fn dragging_a_selected_anchor_relocates_it_in_pause_mode() {
         "body-local anchor updated (got {})",
         def.anchor_a.value()
     );
+}
+
+/// The anchor drag previews live: past the deadzone the glyph would land
+/// at the cursor (`JointAnchorDrag::tentative`, drawn by `joint_viz`), and
+/// the release commits the relocation as one undoable edit that clears the
+/// preview.
+#[test]
+fn an_anchor_drag_previews_at_the_cursor_then_commits() {
+    let mut app = paused_app();
+    let body = spawn_box_at(&mut app, Vec2::ZERO, 40.0, 40.0);
+    let joint = spawn_joint(&mut app, hinge_pin(body, Vec2::ZERO, Vec2::ZERO));
+    let before = app.world().resource::<CommandStack>().undo_len();
+
+    // First press selects the joint and arms the anchor drag.
+    click_at(&mut app, Vec2::ZERO);
+    assert_eq!(selected_joint(&app).map(|e| joint_id(&app, e)), Some(joint));
+
+    // Press again on the glyph and drag past the deadzone: the glyph
+    // previews at the cursor before any commit exists.
+    set_cursor(&mut app, Vec2::ZERO);
+    mouse(&mut app, true);
+    app.update();
+    set_cursor(&mut app, Vec2::new(0.0, 40.0));
+    app.update();
+    app.update();
+    let drag = app.world().resource::<JointAnchorDrag>();
+    assert_eq!(
+        drag.tentative,
+        Some(Vec2::new(0.0, 40.0)),
+        "the glyph previews at the cursor (which only an engaged drag sets)"
+    );
+    assert_eq!(
+        app.world().resource::<CommandStack>().undo_len(),
+        before,
+        "the preview commits nothing"
+    );
+
+    // Release: one edit, preview cleared, both anchors at the release.
+    mouse(&mut app, false);
+    app.update();
+    assert_eq!(app.world().resource::<JointAnchorDrag>().tentative, None);
+    assert_eq!(
+        app.world().resource::<CommandStack>().undo_len(),
+        before + 1
+    );
+    let joint_entity = app.world().resource::<IdIndex>().entity(joint).unwrap();
+    let def = app.world().get::<JointDef>(joint_entity).unwrap();
+    assert_eq!(def.anchor_a.value(), Vec2::new(0.0, 40.0));
+    assert_eq!(def.anchor_b.value(), Vec2::new(0.0, 40.0));
+
+    undo(&mut app);
+    // The undo rebuilds the joint entity (live avian state is derived, so
+    // joint edits reverse through a respawn): resolve it fresh.
+    let joint_entity = entity_of(&app, joint).unwrap();
+    let def = app.world().get::<JointDef>(joint_entity).unwrap();
+    assert_eq!(def.anchor_a.value(), Vec2::ZERO, "undo puts it back");
+}
+
+/// The stable id of a joint entity (the spawn's return value).
+fn joint_id(app: &App, entity: Entity) -> StableId {
+    *app.world().get::<StableId>(entity).unwrap()
 }

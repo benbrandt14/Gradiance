@@ -115,6 +115,32 @@ impl GameCommand for DeleteCommand {
     }
 }
 
+/// Every behavior node attached to any of `body_ids`, as (live entity,
+/// pre-edit record) — the node half of the body↔dependent cascade
+/// (`joint_cmd::joints_referencing` is the joint half). Delete, cut and
+/// merge all reach their nodes through here, so "dies with its body" is a
+/// property of the seam, not of one command.
+pub(crate) fn nodes_attached(
+    world: &mut World,
+    body_ids: &[StableId],
+) -> Vec<(Entity, gradiance_scene::NodeRecord)> {
+    let entities: Vec<Entity> = world
+        .query_filtered::<Entity, With<gradiance_domain::node::BehaviorNode>>()
+        .iter(world)
+        .collect();
+    entities
+        .into_iter()
+        .filter_map(|entity| {
+            let record = gradiance_scene::NodeRecord::capture(world, entity)?;
+            record
+                .attachment
+                .target
+                .is_some_and(|t| body_ids.contains(&t))
+                .then_some((entity, record))
+        })
+        .collect()
+}
+
 /// Rewrites cloned bodies' selection groups to fresh ids (one fresh id
 /// per distinct source group), so duplicates form their *own* groups
 /// instead of joining the originals' — the "group selection deteriorates

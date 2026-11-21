@@ -58,6 +58,10 @@ pub enum UiInput {
         to: Vec2,
         /// Frames of movement between them (1–[`MAX_STEPS`]).
         steps: u32,
+        /// Which button drags (`left` for every existing caller; `right`
+        /// drives the right-button gestures: rotate, pan, the menu's
+        /// deadzone).
+        button: MouseButton,
     },
     /// Press a key with its modifiers held, hold it, release it.
     Key {
@@ -112,16 +116,20 @@ pub enum Event {
 impl UiInput {
     /// The frames this gesture plays, in order.
     pub fn frames(&self) -> Vec<Vec<Event>> {
-        let left = MouseButton::Left;
         match self {
             Self::Click { at, button } => vec![
                 vec![Event::Move(*at)],
                 vec![Event::Button(*button, true)],
                 vec![Event::Button(*button, false)],
             ],
-            Self::Drag { from, to, steps } => {
+            Self::Drag {
+                from,
+                to,
+                steps,
+                button,
+            } => {
                 let steps = (*steps).clamp(1, MAX_STEPS);
-                let mut frames = vec![vec![Event::Move(*from)], vec![Event::Button(left, true)]];
+                let mut frames = vec![vec![Event::Move(*from)], vec![Event::Button(*button, true)]];
                 #[expect(
                     clippy::cast_precision_loss,
                     reason = "at most MAX_STEPS steps: exact in f32"
@@ -129,7 +137,7 @@ impl UiInput {
                 frames.extend(
                     (1..=steps).map(|k| vec![Event::Move(from.lerp(*to, k as f32 / steps as f32))]),
                 );
-                frames.push(vec![Event::Button(left, false)]);
+                frames.push(vec![Event::Button(*button, false)]);
                 frames
             }
             Self::Key { chord, hold } => {
@@ -453,6 +461,7 @@ mod tests {
             from: Vec2::ZERO,
             to: Vec2::new(100.0, 0.0),
             steps: 4,
+            button: MouseButton::Left,
         }
         .frames();
         assert_eq!(frames.len(), 1 + 1 + 4 + 1);
@@ -473,12 +482,35 @@ mod tests {
                 from: Vec2::ZERO,
                 to: Vec2::ONE,
                 steps,
+                button: MouseButton::Left,
             }
             .frames()
             .len()
         };
         assert_eq!(clamp(0), 4, "at least one step");
         assert_eq!(clamp(10_000), 3 + MAX_STEPS as usize, "at most MAX_STEPS");
+    }
+
+    #[test]
+    fn a_named_button_drag_presses_that_button() {
+        let frames = UiInput::Drag {
+            from: Vec2::ZERO,
+            to: Vec2::new(60.0, 0.0),
+            steps: 2,
+            button: MouseButton::Right,
+        }
+        .frames();
+        assert_eq!(frames[1], [Event::Button(MouseButton::Right, true)]);
+        assert_eq!(
+            frames.last(),
+            Some(&vec![Event::Button(MouseButton::Right, false)])
+        );
+        assert!(
+            !frames
+                .iter()
+                .any(|f| f.contains(&Event::Button(MouseButton::Left, true))),
+            "the left button stays up: {frames:?}"
+        );
     }
 
     #[test]
@@ -593,6 +625,7 @@ mod tests {
             from: Vec2::ZERO,
             to: Vec2::ONE,
             steps: MAX_STEPS,
+            button: MouseButton::Left,
         };
         while queue.push(&long) {}
         assert!(queue.len() <= MAX_QUEUED_FRAMES);

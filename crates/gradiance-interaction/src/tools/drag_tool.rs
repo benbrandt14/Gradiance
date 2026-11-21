@@ -42,8 +42,10 @@ impl ManipTool for DragTool {
         let mut out = ManipOutput::default();
 
         // Press: grab the topmost body at the *raw* cursor (grabs land where
-        // you click; snapping is for placement, not flinging).
+        // you click; snapping is for placement, not flinging) — unless a
+        // gizmo pick (a node, via `arm_node_drag`) consumed the press.
         if ctx.left == GesturePhase::Pressed
+            && !ctx.suppress_press
             && let Some(p) = ctx.raw_cursor
             && let Some(hit) = world.topmost_body_at(p)
             && let Some(pose) = world.pose_of(hit)

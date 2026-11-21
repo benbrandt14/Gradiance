@@ -210,6 +210,7 @@ pub fn flame_scale(thrust: f32) -> f32 {
 /// Sizes are screen-constant (`CameraScale`).
 pub fn draw_node_glyphs(
     selection: Res<Selection>,
+    drag: Res<gradiance_interaction::node_edit::NodeDrag>,
     index: Res<IdIndex>,
     nodes: Query<(
         Entity,
@@ -228,11 +229,22 @@ pub fn draw_node_glyphs(
     let theme = active(settings.as_deref());
     let s = cam_scale.0;
     for (entity, transform, kind, attachment, appearance, drive, beam) in &nodes {
-        let p = transform.translation.truncate();
+        // While a node drag holds this node, its glyph follows the cursor
+        // (the preview position; the `Transform` itself is only written by
+        // the commit) and its tether waits for the release.
+        let held = drag.dragging() == Some(entity) && drag.engaged();
+        let p = if held {
+            drag.cursor
+                .unwrap_or_else(|| transform.translation.truncate())
+        } else {
+            transform.translation.truncate()
+        };
         let selected = selection.contains(entity);
         let base = Color::from(theme.display(appearance.fill).with_alpha(1.0));
-        // A double ring marks the node; brighter + larger when selected.
-        let r = if selected { 8.0 * s } else { 6.0 * s };
+        // A double ring marks the node; the same size selected or not —
+        // selection is the accent inner ring, so the glyph the user sees
+        // is exactly the glyph they can grab (`NODE_PICK_PX`).
+        let r = 6.0 * s;
         gizmos.circle_2d(Isometry2d::from_translation(p), r, base);
         gizmos.circle_2d(
             Isometry2d::from_translation(p),
@@ -294,8 +306,9 @@ pub fn draw_node_glyphs(
                 }
             }
         }
-        // Tether to the attached body.
-        if let Some(body) = body {
+        // Tether to the attached body (not while its node is held: the
+        // node is in hand, and where it lands is the release's business).
+        if let Some(body) = body.filter(|_| !held) {
             gizmos.line_2d(p, body.pos, base.with_alpha(0.25));
         }
     }
