@@ -13,8 +13,8 @@ current reference disagree, the newer source wins. Items marked
 *unverified* were not checked in code.
 
 **Status:** **present** (same job, maybe different shape), **partial**
-(part of the job), **missing** (brief in `docs/briefs/S-*`), **declined**
-(not planned, with the reason). A missing item gets a brief only when it
+(part of the job), **missing** (brief in `docs/briefs/S-*`), **rejected**
+(owner ruling). A missing item gets a brief only when it
 reuses an existing seam at a bounded cost; the rest go to the roadmap
 Horizon or are declined.
 
@@ -30,8 +30,8 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Move / rotate / scale | present | select tool + handles (`tools/handles.rs`), `place`, `scale` |
 | Drag (force in play) | present | `tool.drag` (mouse spring, `physics::grab`) |
 | Knife / cut | present | `tool.cut`, `cut` |
-| Sketch (freehand body) | partial | `tool.sketch` (N-6). No gesture grammar (draw a hinge, a spring, play/undo by stroke): tools and keys do those jobs; declined below |
-| Brush (paint/erase area) | partial | sketch tool + CSG `subtract`. No erase-by-brush mode; declined below |
+| Sketch (freehand body) | partial | `tool.sketch` (N-6). No gesture grammar: rejected (owner, 2026-11-21: no shape recognition) |
+| Brush (paint/erase area) | partial | sketch tool paints; erase mode: **S-16** |
 | Hinge / axle | present | `tool.hinge`, `hinge` (body-body and world pin) |
 | Fixate | present | `tool.weld` |
 | Spring | present | `tool.spring`, `spring`; spring from empty space pins to the world (J-1) |
@@ -40,7 +40,7 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Tracer | present | `tool.tracer` (fade, size, pattern: `domain::tracer`) |
 | Laser pen | partial | `tool.laser`, `laser` (N-8): reflection and hit signal. No refraction, no beam colour: **S-3** |
 | Gear | missing | **S-5** (gear outline as geometry, meshing by contact) |
-| Texture | declined | see Declined |
+| Texture | missing | **S-13** |
 | Erase | present | Delete key, `delete` |
 | Rectangle / rotate / zoom / pan (lesson era) | present | box tool, handles, camera rig |
 
@@ -52,21 +52,22 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Undo / redo, undo a run | present | `undo`, `redo`; a run is one undo step |
 | Gravity on/off, strength, direction | present | Settings > Simulation dial, `sim-set "gravity…"` |
 | Air friction, wind | present | `SimSettings` drag/wind (N-4) |
-| Air buoyancy | declined | see Declined |
+| Air buoyancy | missing | **S-22** |
 | Sim speed, frequency, iterations | present | `SimSettings.speed`, `timestep_hz`, `substeps` |
 | Grid, snap | present | `GridSettings`, `SnapConfig` (Phase 1) |
 | Collision layers (check/uncheck all) | present | `DepthBand` ≡ layer, Depth panel, context menu Depth |
-| Material for new objects | missing | **S-4** |
+| Material for new objects | rejected | owner, 2026-11-21 (with presets) |
 | Colour palettes, skins | present | colour presets (`appearance.rs`), looks, chrome presets |
 | Velocity menu: show velocity / momentum / force arrows | partial | `debug.velocities` (global only). Per body, plus momentum and force: **S-2** |
 | Direction picker for velocity | missing | **S-1** (gravity already has one) |
 | File load / save / new | present | `load-scene`, `save-scene`, `new-scene`, File menu |
-| File browser with thumbnails | declined | see Declined |
-| Online scene sharing | declined | see Declined |
+| File browser with thumbnails | missing | **S-17** |
+| Online scene sharing | missing | **S-18** (one-file share, no server) |
 | Tutorials, lessons | declined | owner, 2026-11-19 ("not an educational tool") |
-| Language choice | declined | see Declined |
+| Language choice | missing | **S-19** (string table) |
 | UI scale | *unverified* | egui zoom not checked |
-| Joystick / multi-touch input | declined | see Declined |
+| Joystick | missing | **S-20** |
+| Multi-touch, trackpad gestures | missing | **S-21** |
 
 ## Object context menu
 
@@ -82,17 +83,17 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Transform into gear | missing | **S-5** |
 | CSG | present | `merge`, `subtract`, `intersect`, `xor`, `fillet-merge` |
 | Select objects under cursor | present | context "Select from" stack |
-| Liquify | declined | needs particle water, see Declined |
-| Make sponge (soft body) | declined | see Declined |
+| Liquify | missing | **S-11** (after S-10) |
+| Make sponge (soft body) | missing | **S-12** (spring lattice) |
 | Appearance: colour, opacity, border | present | `Appearance { fill (RGBA), border, emissive }`, `set-color` |
 | Text on object | declined | owner rejected notes/annotations (2026-11-19); `label` names a body in the viewport |
-| Geometry from image | declined | see Declined |
+| Geometry from image | missing | **S-14** |
 | Material: density, friction, restitution | present | inspector, `set-density`, `set-friction`, `set-restitution` |
-| Material: mass entry | partial | density only; mass is derived. Mass field: **S-4** |
+| Material: mass entry | partial | density only; mass is derived (the field was in the rejected presets brief) |
 | Material: refractive index | missing | **S-3** |
 | Material: attraction | present | `FieldSource` (`domain::field`, M20) |
 | Material: surface velocity (conveyor) | missing | **S-8** |
-| Material presets (wood, glass, …) | missing | **S-4** |
+| Material presets (wood, glass, …) | rejected | owner, 2026-11-21 |
 | Velocity: set linear and angular velocity | missing | **S-1** (velocity is not authored today) |
 | Information: mass, position, speed, spin, momentum, angular momentum, kinetic energy | present | quantity catalog (`quantity`), signal sources, Probe panel |
 | Information: area, moment of inertia, potential energy | missing | **S-2** |
@@ -120,10 +121,10 @@ jitter, water surface, laser canvas block, `signal.bind`).
 
 | Feature | Status | Where in Gradiance |
 |---|---|---|
-| Particle water, add water | declined | `Fluid` region (N-7) floats bodies; particle water: see Declined |
+| Particle water, add water | missing | `Fluid` region (N-7) floats bodies; particles: **S-10** spike, **S-11** tools |
 | Refraction, total internal reflection | missing | **S-3** |
 | Mirror (index ∞) | present | every solid body reflects (N-8) |
-| Dispersion, white light | declined | see Declined |
+| Dispersion, white light | missing | **S-15** (after S-3) |
 
 ## Scripting
 
@@ -154,24 +155,18 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Follow a body | missing | **S-9** |
 | Zoom to fit / to selection | missing | **S-9** |
 
-## Declined, with reasons
+## Rejected or declined
 
-- **Particle water, liquify, add water.** The planner did not recommend it
-  on 2026-11-19 (roadmap § Nonlinear dynamics). It needs a particle solver
-  coupled to avian, a new derived store and a renderer. The kernel spike
-  de-risks the maths, not the coupling. Kept on the roadmap Horizon.
-- **Soft bodies (sponge).** A spring lattice is buildable today from
-  `chain`/`spring` verbs in a script. A real soft body is a new solver.
-  Horizon.
-- **Textures and geometry from image.** Conflicts with the owner's toon
-  look direction (2026-11-19). Image geometry needs a sampled-field SDF
-  leaf, because `polygonize` is the single discretization point. Horizon.
-- **Dispersion and white light.** Follows S-3 only if refraction proves
-  useful. Not briefed.
-- **Sketch gesture grammar, brush erase.** Tools, keys and CSG cover the
-  same jobs. A gesture recogniser is a large input surface for low gain.
-- **File browser thumbnails, online sharing, language choice, joystick,
-  multi-touch, tutorials, text notes.** Product scope the owner rejected
-  (notes, examples) or that does not fit a desktop engineering sandbox.
-- **Air buoyancy.** Air density already enters drag. A buoyant force of
-  air on a 2D body is below the solver noise for normal densities.
+Owner ruling 2026-11-21: "Reject material presets and include the
+others." Every item the first audit declined now has a brief (S-10 ..
+S-22), except these three, which the owner rejected earlier:
+
+- **Material presets, default material** (owner, 2026-11-21).
+- **Sketch gesture grammar** (owner, 2026-11-21: no freehand shape
+  recognition, "this should be a more precise tool than that").
+- **Text notes, tutorials and examples** (owner, 2026-11-19: "this isn't
+  an educational tool").
+
+**Size warning.** S-10 (particle fluid) is a spike with a decision note,
+because body coupling is unverified. S-11 waits for it. S-12 builds a soft
+body from existing springs, not a new solver.

@@ -13,7 +13,7 @@ as #305; earlier history in git).
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
 - **Queued** (one ordered list: `docs/roadmap.md` § "Unified plan",
-  2026-11-21): **Phase S** sandbox parity (S-1..S-9, after Phase Q) →
+  2026-11-21): **Phase S** sandbox parity (S-1..S-22, S-4 rejected, after Phase Q) →
   **C** construction & measurement (C-1..C-6) → **E** editable paths /
   splines (E-1..E-7) → **H** shape finishing (H-1..H-3) → **T** arrays
   rebuilt (T-0 decision with a review question, then T-1..T-5, stubs until
@@ -30,7 +30,8 @@ as #305; earlier history in git).
   order, one PR per cycle from `claude/jolly-noether-su0a6h`. **S-1**
   authored initial velocity and spin is done (`InitialMotion`,
   `set-velocity`/`set-spin`, inspector "Starting motion"; see its Outcome).
-  **Next:** S-2 readouts and XY plots, then S-3..S-9.
+  **Next:** S-2 readouts and XY plots, then S-3, S-5..S-22 in number
+  order (S-4 material presets rejected by the owner, 2026-11-21, #307).
   **Phase Q is merged (#305):** Q-2..Q-6 and Q-8 done, Q-7 returned (avian
   reports a standing joint correction as velocity; ignored repro,
   `docs/upstream-watch.md`). **Q-9** (fills lost after the chain tool, Q-1
@@ -320,7 +321,7 @@ as #305; earlier history in git).
       cut/select/boolean stress test (done, #293).
   12. **Phase Q** (follow-ups, owner choice 2026-11-20): **Q-1** .. **Q-8**
       (`docs/briefs/Q-*`), in order. **Phase S** sandbox parity (audit
-      `docs/parity-audit.md`, briefs S-1..S-9) follows Phase Q.
+      `docs/parity-audit.md`, briefs S-1..S-22, S-4 rejected) follows Phase Q.
   12b. **VectorCraft port** (planned 2026-11-21, owner direction; roadmap
       § "Unified plan"): **C-1..C-6**, **E-1..E-7**, **H-1..H-3**,
       **T-0..T-5**, then the G track below, then **B-0..B-4** (B-1 =
