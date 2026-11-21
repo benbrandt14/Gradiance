@@ -8,6 +8,7 @@
 //! release — exactly one commit (move / scale / duplicate). The tool mutates
 //! nothing directly, so the one-gesture-one-command contract holds.
 
+use crate::pointer::RIGHT_CLICK_DEADZONE_PX;
 use crate::selection::{SelectTransition, Selection, dedup_preserving_order};
 use crate::tools::array_tool::{ArrayMetrics, ArrayPlan, plan_drag, selection_pieces};
 use crate::tools::context::{
@@ -36,8 +37,10 @@ const HANDLE_RADIUS_PX: f32 = 10.0;
 /// Smallest pivot-to-grab distance (metres) that yields a usable scale
 /// factor — purely a divide-by-zero guard.
 const SCALE_EPSILON: f32 = 1e-4;
-/// Right-drag deadzone (logical px) before rotation engages.
-const ROTATE_DEADZONE_PX: f32 = 8.0;
+/// Right-drag deadzone (logical px) before rotation engages: the shared
+/// right-click deadzone, so a click that falls inside it always reaches
+/// the context menu and never half-rotates instead.
+const ROTATE_DEADZONE_PX: f32 = RIGHT_CLICK_DEADZONE_PX;
 /// Shift-press deadzone (logical px): inside = a toggle click, past it the
 /// gesture becomes an additive rubber band.
 const CLICK_DEADZONE_PX: f32 = 4.0;

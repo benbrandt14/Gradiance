@@ -5,6 +5,14 @@
 
 use bevy::prelude::*;
 
+/// Screen-space deadzone (logical px) that separates a right **click** from
+/// a right **drag**: a release within this many pixels of its press is a
+/// click (the context menu opens); motion past it engages the right-button
+/// gestures instead (select-tool rotate, camera pan). One number so the
+/// three right-button consumers can never disagree about which one owns
+/// the gesture.
+pub const RIGHT_CLICK_DEADZONE_PX: f32 = 8.0;
+
 #[derive(Default, Debug, Clone, Copy)]
 struct ButtonEdges {
     current: bool,

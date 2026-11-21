@@ -20,6 +20,7 @@ mod buoyancy;
 mod chains;
 mod client;
 mod clipboard;
+mod context_menu;
 mod csg;
 mod cut_select_stress;
 mod debug_overlay;

@@ -243,6 +243,12 @@ impl Plugin for GradianceUiPlugin {
         // Copy and paste of bodies (brief R-3): headless too, where a paste
         // reads the app's last copy.
         clipboard::install(app);
+        // The context menu's *open* logic is plain input handling — no
+        // egui — so it registers headless too: the menu state and its
+        // right-click picking are then testable without a renderer (the
+        // menu's rendering stays behind the RenderPlugin check below).
+        app.init_resource::<context_menu::ContextMenu>();
+        app.add_systems(Update, context_menu::open_context_menu);
         if !app.is_plugin_added::<bevy::render::RenderPlugin>() {
             return;
         }
@@ -260,7 +266,6 @@ impl Plugin for GradianceUiPlugin {
         app.add_systems(Startup, toolbar::load_tool_icons);
         app.init_resource::<icons::Icons>();
         app.add_systems(Startup, icons::load_icons);
-        app.init_resource::<context_menu::ContextMenu>();
         app.init_resource::<plot::PlotConfig>();
         app.add_systems(Startup, review::open_in_review_mode);
         app.init_resource::<PanelRects>();
@@ -323,7 +328,6 @@ impl Plugin for GradianceUiPlugin {
             schedule.set_executor(bevy::ecs::schedule::SingleThreadedExecutor::new());
         });
         // The panel operations (`panel_ops`) install headless with `ops`.
-        app.add_systems(Update, context_menu::open_context_menu);
     }
 }
 

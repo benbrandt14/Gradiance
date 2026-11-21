@@ -23,7 +23,7 @@ use gradiance_interaction::align::{AlignItem, AlignOp, align_changes};
 use gradiance_interaction::cursor::CursorWorldPos;
 use gradiance_interaction::input::{EditorAction, key_invocations};
 use gradiance_interaction::joint_edit::ANCHOR_PICK_PX;
-use gradiance_interaction::pointer::PointerButtons;
+use gradiance_interaction::pointer::{PointerButtons, RIGHT_CLICK_DEADZONE_PX};
 use gradiance_interaction::selection::{SelectTransition, SelectedJoint, Selection};
 use gradiance_interaction::tools::bodies_at_sorted;
 use gradiance_op::{InvokeOp, json};
@@ -92,11 +92,7 @@ impl BackgroundMenu<'_> {
             if !BACKGROUND_BUILTINS.contains(&name) || !background_builtin_shown(name, top_down) {
                 continue;
             }
-            let mut button = ui.button(&action.label);
-            if !action.hint.is_empty() {
-                button = button.on_hover_text(&action.hint);
-            }
-            if button.clicked() {
+            if row(ui, &action.label, &action.hint) {
                 script.inputs.invoke(action, at);
                 close = true;
             }
@@ -116,16 +112,13 @@ impl BackgroundMenu<'_> {
         // Reset the grid's user coordinate system to world axes (undoes an
         // "align grid to body").
         if (self.grid.origin.value() != Vec2::ZERO || self.grid.rotation.value() != 0.0)
-            && ui
-                .button("Reset grid to world")
-                .on_hover_text("clear a local-frame alignment")
-                .clicked()
+            && row(ui, "Reset grid to world", "clear a local-frame alignment")
         {
             self.grid.origin = gradiance_units::Displacement(Vec2::ZERO);
             self.grid.rotation = gradiance_units::Angle(0.0);
             close = true;
         }
-        if ui.button("Scene & lighting settings…").clicked() {
+        if row(ui, "Scene & lighting settings…", "") {
             self.settings_window.open = true;
             self.settings_window.tab = crate::settings::SettingsTab::Lighting;
             close = true;
@@ -180,7 +173,7 @@ pub struct NodeMenu<'w, 's> {
 }
 
 /// Open context menu state.
-#[derive(Resource, Default, Debug)]
+#[derive(Resource, Default, Debug, Clone)]
 pub struct ContextMenu {
     /// Whether the menu is showing.
     pub open: bool,
@@ -220,6 +213,40 @@ impl Default for FilletRadius {
     }
 }
 
+/// One context-menu button, published under `context:<label>` so
+/// `ui.inspect` lists it and `ui.click` / `ui.click_button` can drive the
+/// menu remotely by name (a test and a script can press
+/// "context:Delete node" instead of measuring pixels; the top menu bar
+/// owns the `menu:` prefix). `hint` becomes the hover text when non-empty.
+fn row(ui: &mut egui::Ui, label: &str, hint: &str) -> bool {
+    publish_row(label, ui.button(label), hint)
+}
+
+/// The enabled-gated form of [`row`].
+fn row_enabled(ui: &mut egui::Ui, label: &str, hint: &str, enabled: bool) -> bool {
+    publish_row(
+        label,
+        ui.add_enabled(enabled, egui::Button::new(label)),
+        hint,
+    )
+}
+
+/// The compact form of [`row`] (the align and depth button strips).
+fn row_small(ui: &mut egui::Ui, label: &str) -> bool {
+    publish_row(label, ui.small_button(label), "")
+}
+
+/// Publishes the response's rect under `context:<label>` and reports the
+/// click.
+fn publish_row(label: &str, response: egui::Response, hint: &str) -> bool {
+    crate::widget_registry::publish_target(&format!("context:{label}"), response.rect);
+    if hint.is_empty() {
+        response.clicked()
+    } else {
+        response.on_hover_text(hint).clicked()
+    }
+}
+
 /// Nearest joint id whose glyph distance is within `radius`. Pure so the
 /// pick can be unit-tested without a World; the caller supplies each
 /// joint's distance via `joint_edit::glyph_distance` (whole ring / travel
@@ -234,10 +261,14 @@ fn nearest_joint(
         .map(|(id, _)| id)
 }
 
-/// Opens the menu on a right *click* — a release within a small screen
-/// deadzone of the press. Gestures that need right-drag (selection
-/// rotate, camera pan) use the same deadzone, so a click reaches the
-/// menu and a drag never does; no cross-system ordering is involved.
+/// Opens the menu on a right *click* — a release within the shared
+/// right-click deadzone of the press. Gestures that need right-drag
+/// (selection rotate, camera pan) use the same deadzone, so a click always
+/// reaches the menu and a drag never does; no cross-system ordering is
+/// involved. A right-click while the **left** button is held (a gesture in
+/// flight owns the pointer) is ignored — it must not open a menu over a
+/// running gesture, and its click-through selection must not hijack the
+/// selection the gesture is already using.
 #[expect(clippy::too_many_arguments)] // one click handler, grouped reads
 pub fn open_context_menu(
     buttons: Res<PointerButtons>,
@@ -260,8 +291,9 @@ pub fn open_context_menu(
         *press_pos = screen;
     }
     if buttons.just_released(MouseButton::Right)
+        && !buttons.pressed(MouseButton::Left)
         && let (Some(start), Some(now)) = (press_pos.take(), screen)
-        && start.distance(now) < 4.0
+        && start.distance(now) < RIGHT_CLICK_DEADZONE_PX
         && let Some(world) = cursor.0
     {
         menu.under = bodies_at_sorted(world, &physics, &bodies)
@@ -334,6 +366,14 @@ pub fn context_menu(
         return Ok(());
     }
     let ctx = contexts.ctx_mut()?;
+    // The menu's opening pass. Captured **before** the `fresh` block
+    // consumes the flag below: egui sizes a brand-new area before it can
+    // be interacted with, and the very click that opened the menu is still
+    // in this pass's input, so `clicked_elsewhere` would read the menu's
+    // own opening click as a click elsewhere and close it immediately (the
+    // "first right-click of the session shows no menu" bug). The opening
+    // pass never closes on an outside click.
+    let opened_this_pass = menu.fresh;
     // Right-click selects what it acts on (Algodoo): when the menu opens
     // over a body that is not part of the selection, the topmost body under
     // the click becomes the selection, so every entry below binds to what
@@ -399,7 +439,7 @@ pub fn context_menu(
                         });
                     }
                     ui.separator();
-                    if ui.button("Delete node").clicked() {
+                    if row(ui, "Delete node", "") {
                         writers.invoke.write(InvokeOp::with(
                             "body.delete",
                             json!({"i": node_id.0.to_string()}),
@@ -416,7 +456,7 @@ pub fn context_menu(
                     && let Ok(def) = joints.get(entity)
                 {
                     widgets::section_header(ui, kind_name(&def.kind));
-                    if ui.button("Configure joint…").clicked() {
+                    if row(ui, "Configure joint…", "") {
                         SelectTransition::SelectJoint(entity).apply(
                             &mut selection,
                             &mut selected_joint,
@@ -440,7 +480,7 @@ pub fn context_menu(
                         });
                         close = true;
                     }
-                    if ui.button("Delete joint").clicked() {
+                    if row(ui, "Delete joint", "") {
                         writers.invoke.write(InvokeOp::with(
                             "joint.delete",
                             json!({"i": joint_id.0.to_string()}),
@@ -454,7 +494,7 @@ pub fn context_menu(
                 // the everyday sections live here; the full Properties pane is a
                 // command away.
                 if !selected_ids.is_empty() {
-                    if ui.button("Properties…").clicked() {
+                    if row(ui, "Properties…", "") {
                         panels.inspector.open = true;
                         close = true;
                     }
@@ -479,14 +519,13 @@ pub fn context_menu(
                     ui.separator();
                 }
 
-                if ui
-                    .add_enabled(!selected_ids.is_empty(), egui::Button::new("Set in orbit"))
-                    .on_hover_text(
-                        "give each body the circular-orbit velocity around the \
-                         dominant attractive field at its position (Algodoo)",
-                    )
-                    .clicked()
-                {
+                if row_enabled(
+                    ui,
+                    "Set in orbit",
+                    "give each body the circular-orbit velocity around the \
+                     dominant attractive field at its position (Algodoo)",
+                    !selected_ids.is_empty(),
+                ) {
                     writers
                         .orbits
                         .write(gradiance_physics::fields::SetOrbitRequest {
@@ -494,54 +533,41 @@ pub fn context_menu(
                         });
                     close = true;
                 }
-                if ui
-                    .add_enabled(!selected_ids.is_empty(), egui::Button::new("Pin probe"))
-                    .on_hover_text("pin a live physics readout in the Probes window")
-                    .clicked()
-                {
+                if row_enabled(
+                    ui,
+                    "Pin probe",
+                    "pin a live physics readout in the Probes window",
+                    !selected_ids.is_empty(),
+                ) {
                     for id in &selected_ids {
                         writers.probes.pin(*id);
                     }
                     close = true;
                 }
-                if ui
-                    .add_enabled(
-                        !selected_ids.is_empty(),
-                        egui::Button::new("Add to node editor"),
-                    )
-                    .on_hover_text("place this body's block on the node graph canvas")
-                    .clicked()
-                {
+                if row_enabled(
+                    ui,
+                    "Add to node editor",
+                    "place this body's block on the node graph canvas",
+                    !selected_ids.is_empty(),
+                ) {
                     for id in &selected_ids {
                         writers.node_graph.add_body(*id);
                     }
                     close = true;
                 }
-                if ui
-                    .add_enabled(selected_ids.len() >= 2, egui::Button::new("Group"))
-                    .clicked()
-                {
+                if row_enabled(ui, "Group", "", selected_ids.len() >= 2) {
                     writers
                         .invoke
                         .write_batch(key_invocations(EditorAction::Group));
                     close = true;
                 }
-                if ui
-                    .add_enabled(any_grouped, egui::Button::new("Ungroup"))
-                    .clicked()
-                {
+                if row_enabled(ui, "Ungroup", "", any_grouped) {
                     writers
                         .invoke
                         .write_batch(key_invocations(EditorAction::Ungroup));
                     close = true;
                 }
-                if ui
-                    .add_enabled(
-                        selected_ids.len() >= 2,
-                        egui::Button::new("Merge into one body"),
-                    )
-                    .clicked()
-                {
+                if row_enabled(ui, "Merge into one body", "", selected_ids.len() >= 2) {
                     writers.invoke.write(InvokeOp::with(
                         "body.merge",
                         json!({"a": "selection", "b": "selection"}),
@@ -550,16 +576,12 @@ pub fn context_menu(
                 }
                 // Merge with a fillet: the same boolean, as a smooth union
                 // of the radius set just below it.
-                if ui
-                    .add_enabled(
-                        selected_ids.len() >= 2,
-                        egui::Button::new("Merge with fillet"),
-                    )
-                    .on_hover_text(
-                        "merge into one body, blending a rounded fillet where the bodies meet",
-                    )
-                    .clicked()
-                {
+                if row_enabled(
+                    ui,
+                    "Merge with fillet",
+                    "merge into one body, blending a rounded fillet where the bodies meet",
+                    selected_ids.len() >= 2,
+                ) {
                     writers.invoke.write(InvokeOp::with(
                         "body.fillet_merge",
                         json!({"a": "selection", "b": "selection", "radius": fillet_radius}),
@@ -596,11 +618,7 @@ pub fn context_menu(
                         "keep what lies in exactly one selected body; the overlap is removed",
                     ),
                 ] {
-                    if ui
-                        .add_enabled(selected_ids.len() >= 2, egui::Button::new(label))
-                        .on_hover_text(hint)
-                        .clicked()
-                    {
+                    if row_enabled(ui, label, hint, selected_ids.len() >= 2) {
                         writers.invoke.write(InvokeOp::with(
                             id,
                             json!({"a": "selection", "b": "selection"}),
@@ -646,7 +664,7 @@ pub fn context_menu(
                             ("distribute horizontally", AlignOp::DistributeX),
                             ("distribute vertically", AlignOp::DistributeY),
                         ] {
-                            if ui.small_button(label).clicked() {
+                            if row_small(ui, label) {
                                 emit(op);
                             }
                         }
@@ -657,13 +675,12 @@ pub fn context_menu(
                 // Array repeat: the gesture is alt-drag on a handle, so the
                 // menu entry only opens the rulebook.
                 if !selected_ids.is_empty()
-                    && ui
-                        .button("Array options…")
-                        .on_hover_text(
-                            "repeat the selection by holding Alt and dragging a \
-                             selection handle",
-                        )
-                        .clicked()
+                    && row(
+                        ui,
+                        "Array options…",
+                        "repeat the selection by holding Alt and dragging a \
+                         selection handle",
+                    )
                 {
                     panels.array.open = true;
                     close = true;
@@ -706,7 +723,7 @@ pub fn context_menu(
                             |name| object_label(name, &id),
                         );
                         let title = format!("· {title}");
-                        if ui.button(title).clicked() {
+                        if row(ui, &title, "") {
                             if let Some(entity) = index.entity(id) {
                                 gradiance_interaction::selection::SelectTransition::SetBodies(
                                     vec![entity],
@@ -734,20 +751,20 @@ pub fn context_menu(
                          f: &dyn Fn(&DepthBand) -> DepthBand| {
                             depth_edit(&selection, &props.ids, &props.depths, edits, f);
                         };
-                    if ui.small_button("to front").clicked() {
+                    if row_small(ui, "to front") {
                         shift(&mut props.edits, &|old| DepthBand::metres(0.0, old.thickness().max(DepthBand::MIN_THICKNESS)));
                         close = true;
                     }
-                    if ui.small_button("forward").clicked() {
+                    if row_small(ui, "forward") {
                         shift(&mut props.edits, &|old| DepthBand::metres(old.near.value() - step, old.far.value() - step));
                         close = true;
                     }
-                    if ui.small_button("backward").clicked() {
+                    if row_small(ui, "backward") {
                         shift(&mut props.edits, &|old| DepthBand::metres(old.near.value() + step, old.far.value() + step));
                         close = true;
                     }
                 });
-                if ui.button("Depth panel…").clicked() {
+                if row(ui, "Depth panel…", "") {
                     panels.depth.open = true;
                     close = true;
                 }
@@ -755,10 +772,11 @@ pub fn context_menu(
                 // grid's user coordinate system (sketch in its axes).
                 if let Some(primary) = selection.primary()
                     && let Ok((_, transform, _)) = bodies_q.get(primary)
-                    && ui
-                        .button("Align grid to body")
-                        .on_hover_text("move & rotate the grid into this body's frame")
-                        .clicked()
+                    && row(
+                        ui,
+                        "Align grid to body",
+                        "move & rotate the grid into this body's frame",
+                    )
                 {
                     background.align_grid_to(PosRot::from_transform(transform));
                     close = true;
@@ -767,11 +785,12 @@ pub fn context_menu(
                 // Random palette colors: one per body, or one per group
                 // (bodies sharing an outermost group match). The palette
                 // walk is `appearance::random_fills`; this is one intent.
-                let grouped_click = ui
-                    .button("Random colors (per group)")
-                    .on_hover_text("grouped bodies share one color")
-                    .clicked();
-                let per_body_click = ui.button("Random colors (per body)").clicked();
+                let grouped_click = row(
+                    ui,
+                    "Random colors (per group)",
+                    "grouped bodies share one color",
+                );
+                let per_body_click = row(ui, "Random colors (per body)", "");
                 if grouped_click || per_body_click {
                     let members: Vec<_> = selection
                         .iter()
@@ -809,7 +828,7 @@ pub fn context_menu(
                     ui.separator();
                     ui.label(egui::RichText::new("Scripts").weak());
                     for action in script.actions.user() {
-                        if ui.button(&action.label).clicked() {
+                        if row(ui, &action.label, &action.hint) {
                             script.inputs.invoke(action, at);
                             close = true;
                         }
@@ -822,7 +841,7 @@ pub fn context_menu(
     // The optimizer entry's buttons, through the menu's one writer.
     writers.invoke.write_batch(panels.optimizer.take_requests());
 
-    if close || response.clicked_elsewhere() {
+    if close || (response.clicked_elsewhere() && !opened_this_pass) {
         menu.open = false;
     }
     Ok(())

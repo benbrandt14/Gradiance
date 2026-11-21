@@ -159,6 +159,32 @@ pub fn apply_projection(
     }
 }
 
+/// Advances the right-button pan's engagement for one frame: records the
+/// press, forgets it on release, and engages only once the cursor has
+/// left the shared right-click deadzone — a release inside the deadzone
+/// belongs to the context menu, so the pan must not have eaten it. Pure
+/// over its arguments so the rule is unit-testable without a rig.
+fn right_pan_engaged(
+    buttons: &ButtonInput<MouseButton>,
+    cursor: Option<Vec2>,
+    press: &mut Option<Vec2>,
+    engaged: &mut bool,
+) -> bool {
+    if buttons.just_pressed(MouseButton::Right) {
+        *press = cursor;
+        *engaged = false;
+    }
+    if !buttons.pressed(MouseButton::Right) {
+        *press = None;
+    } else if let (Some(start), Some(now)) = (*press, cursor)
+        && !*engaged
+        && start.distance(now) > crate::pointer::RIGHT_CLICK_DEADZONE_PX
+    {
+        *engaged = true;
+    }
+    buttons.pressed(MouseButton::Right) && *engaged
+}
+
 /// Drives the rig from input: pan, zoom-at-cursor, orbit, and glides.
 pub fn pan_and_zoom_camera(
     mut rig: ResMut<CameraRig>,
@@ -173,6 +199,11 @@ pub fn pan_and_zoom_camera(
     keyboard_captured: Res<crate::KeyboardCaptured>,
     gesture: Res<crate::tools::ActiveGesture>,
     time: Res<Time>,
+    // The right press that may become a pan, and whether it has left the
+    // right-click deadzone yet: a release inside the deadzone belongs to
+    // the context menu, so panning starts only past it, like rotate.
+    mut right_press: Local<Option<Vec2>>,
+    mut right_engaged: Local<bool>,
 ) {
     let Ok((mut projection, camera, global)) = cameras.single_mut() else {
         return;
@@ -203,7 +234,15 @@ pub fn pan_and_zoom_camera(
     let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
     let middle = buttons.pressed(MouseButton::Middle);
     let orbiting = middle && !shift;
-    let panning = buttons.pressed(MouseButton::Right) || (middle && shift);
+
+    // The right-button pan claims its drag only past the right-click
+    // deadzone (the same one the context menu and the rotate gesture
+    // use), so a sloppy right-click neither pans nor rotates: the menu
+    // owns it. Middle-drag keeps its immediate feel.
+    let cursor_now = windows.iter().next().and_then(Window::cursor_position);
+    let right_panning =
+        right_pan_engaged(&buttons, cursor_now, &mut right_press, &mut right_engaged);
+    let panning = right_panning || (middle && shift);
 
     // Right-drag pans only when no tool gesture owns the pointer (the
     // select tool uses right-drag for rotation).
@@ -321,4 +360,61 @@ pub fn plane_point(camera: &Camera, global: &GlobalTransform, screen: Vec2) -> O
         return None;
     }
     Some((ray.origin + *ray.direction * t).truncate())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A right press-and-release inside the deadzone never engages the pan
+    /// (the context menu owns that click); motion past it engages, and the
+    /// pan stays owned to the release. `ButtonInput::clear` between calls
+    /// is what `InputSystems` does at the top of every frame.
+    #[test]
+    fn right_pan_engages_only_past_the_click_deadzone() {
+        let mut buttons = ButtonInput::<MouseButton>::default();
+        let mut press = None;
+        let mut engaged = false;
+        let at = |x: f32| Some(Vec2::new(x, 0.0));
+
+        buttons.press(MouseButton::Right);
+        assert!(!right_pan_engaged(
+            &buttons,
+            at(0.0),
+            &mut press,
+            &mut engaged
+        ));
+
+        let inside = crate::pointer::RIGHT_CLICK_DEADZONE_PX - 1.0;
+        buttons.clear();
+        assert!(
+            !right_pan_engaged(&buttons, at(inside), &mut press, &mut engaged),
+            "a click inside the deadzone is the menu's, not the pan's"
+        );
+
+        let past = crate::pointer::RIGHT_CLICK_DEADZONE_PX + 1.0;
+        buttons.clear();
+        assert!(right_pan_engaged(
+            &buttons,
+            at(past),
+            &mut press,
+            &mut engaged
+        ));
+
+        buttons.clear();
+        assert!(
+            right_pan_engaged(&buttons, at(inside), &mut press, &mut engaged),
+            "once engaged the pan keeps the drag, back inside the deadzone too"
+        );
+
+        buttons.release(MouseButton::Right);
+        buttons.clear();
+        assert!(!right_pan_engaged(
+            &buttons,
+            at(past),
+            &mut press,
+            &mut engaged
+        ));
+        assert!(press.is_none(), "the release forgets the press");
+    }
 }
