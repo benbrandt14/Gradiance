@@ -37,8 +37,13 @@ as #305; earlier history in git).
   `docs/upstream-watch.md`). **Q-9** (fills lost after the chain tool, Q-1
   Outcome) does **not reproduce** on main `8f7c547`: on lavapipe, laying a
   chain across a ground, a box and a circle leaves all three filled
-  (2026-11-21); no brief written. `fluid-surface-look` awaits the owner's
-  verdict on the #305 shots.
+  (2026-11-21); no brief written. The owner found the water still inherits the
+  solid-body look (2026-11-21): **open review question `fluid-look`**
+  (`docs/review/questions.ron`, `cargo run -- --review`) offers four
+  looks through the new render setting `RenderSettings::fluid_look`
+  (`Shaded` today, `Flat`, `Clear`, `Deep`; a fifth, `Outline`, is in
+  Settings > Render). Ingest its answer at the next phase start: the
+  picked look becomes the default (`FluidLook::default`).
   **Before that:** **G-1 the graph IR crate is done** (merged #297, on the G-0
   decision #296): the new pure
   crate `gradiance-graph` (`graph → core, domain`; DAG row and serde

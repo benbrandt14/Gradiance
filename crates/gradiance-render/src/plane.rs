@@ -156,6 +156,7 @@ pub fn sync_ground_planes(
     scenery: Res<ScenerySettings>,
     render: Res<RenderSettings>,
     mut shown_look: Local<Option<Look>>,
+    mut shown_fluid_look: Local<Option<gradiance_domain::settings::FluidLook>>,
     changed: Query<
         (Entity, &ShapeDef, &Appearance, &Transform, Has<Fluid>),
         (
@@ -191,7 +192,10 @@ pub fn sync_ground_planes(
             );
         }
     }
-    if relook || scenery.is_changed() {
+    // A new fluid look re-tints a sea.
+    let refluid = *shown_fluid_look != Some(render.fluid_look);
+    *shown_fluid_look = Some(render.fluid_look);
+    if relook || refluid || scenery.is_changed() {
         for (entity, shape, appearance, transform, fluid) in &all {
             rebuild_ground(
                 &mut commands,
@@ -263,7 +267,14 @@ fn rebuild_ground(
     let normal = Vec2::from_angle(pose.rot).rotate(Vec2::Y);
     let mut fill = theme.display(appearance.fill);
     if fluid {
-        fill.a *= crate::material_sync::FLUID_OPACITY;
+        let alpha = fill.a * render.fluid_look.opacity();
+        fill = gradiance_domain::appearance::Rgba {
+            a: alpha,
+            ..fill.lerp(
+                gradiance_domain::theme::FLUID_DEPTH_TONE,
+                render.fluid_look.depth_shade(),
+            )
+        };
     }
     let mut material = plane_material(
         fill.into(),

@@ -35,6 +35,7 @@ pub fn draw_body_borders(
             &Appearance,
             &DepthBand,
             &Transform,
+            Has<Fluid>,
         ),
         With<Body>,
     >,
@@ -42,9 +43,10 @@ pub fn draw_body_borders(
     mut gizmos: Gizmos<OverlayGizmos>,
 ) {
     let theme = active(settings.as_deref());
-    for (shape, contours, appearance, layers, transform) in &bodies {
+    let fluid_outline = settings.as_deref().is_none_or(|s| s.fluid_look.outline());
+    for (shape, contours, appearance, layers, transform, fluid) in &bodies {
         let border = theme.display(appearance.border);
-        if border.a <= 0.01 || shape.contains_half_plane() {
+        if border.a <= 0.01 || shape.contains_half_plane() || (fluid && !fluid_outline) {
             continue;
         }
         let color = Color::from(border);

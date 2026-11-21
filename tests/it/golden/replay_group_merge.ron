@@ -266,6 +266,7 @@
             specular: 0.0,
             relief: 1.0,
             bevel: 0.6,
+            fluid_look: Shaded,
         ),
         lighting: (
             lights: [

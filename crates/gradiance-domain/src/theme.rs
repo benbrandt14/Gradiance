@@ -109,6 +109,7 @@ impl Look {
             specular: 0.0,
             relief,
             bevel: STUDIO_BEVEL,
+            fluid_look: crate::settings::FluidLook::default(),
         }
     }
 
@@ -402,6 +403,9 @@ pub const WHITE_LIGHT: Rgba = Rgba::rgb(1.0, 1.0, 1.0);
 /// is the fill blended part way to this, so it reads as the water's top in
 /// every look.
 pub const FLUID_SURFACE_LIFT: Rgba = Rgba::rgb(1.0, 1.0, 1.0);
+
+/// The deep-water tone the `Deep` fluid look darkens its fill toward.
+pub const FLUID_DEPTH_TONE: Rgba = Rgba::rgb(0.02, 0.06, 0.16);
 /// The studio key: a warm lamp.
 /// Studio's white point: a face lit by both lights lands at about 0.76 of
 /// the ramp (the authored-fill band), so a face turned toward the key can

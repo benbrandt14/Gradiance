@@ -14,5 +14,38 @@
 (
     version: 1,
     questions: [
+        (
+            id: "fluid-look",
+            title: "How should water look?",
+            source: "Q-5 (#305 screenshots): the owner found the water inherits the solid-body look",
+            description: r#"Fluid regions (a pool, a tank, a sea) were drawn like any body: toon bands, the bevelled relief and the outline, made translucent. That reads as a glass block rather than water. These options draw water in its own way. Every option keeps the light surface line along the top.
+
+Settings are global, so flip between the options rather than viewing them side by side. Press play: the box, the ball and the plank float half under; the heavy ball in the right tank sinks through. Judge how the water reads against the bodies in it and behind it, and whether the submerged parts show. Orbit (middle-drag) to see the sides of the pool. A fifth look, `Outline` (a faint tint that keeps the outline), is in Settings > Render if none of these fits."#,
+            options: [
+                (
+                    label: "Shaded body (today)",
+                    caption: "The body's toon bands, relief and outline at 45 % opacity.",
+                    scripts: ["scenes/fluid-look/scene.scm", "scenes/fluid-look/water.scm"],
+                ),
+                (
+                    label: "Flat tint",
+                    caption: "An even, unlit tint of the fill at 45 %; no bands, relief or outline.",
+                    scripts: ["scenes/fluid-look/scene.scm", "scenes/fluid-look/water.scm"],
+                    settings: (render: (fluid_look: Flat)),
+                ),
+                (
+                    label: "Clear",
+                    caption: "A light, mostly see-through tint (22 %); no outline.",
+                    scripts: ["scenes/fluid-look/scene.scm", "scenes/fluid-look/water.scm"],
+                    settings: (render: (fluid_look: Clear)),
+                ),
+                (
+                    label: "Deep",
+                    caption: "A darker tint toward deep blue at 68 %; hides more of what is under it.",
+                    scripts: ["scenes/fluid-look/scene.scm", "scenes/fluid-look/water.scm"],
+                    settings: (render: (fluid_look: Deep)),
+                ),
+            ],
+        ),
     ],
 )

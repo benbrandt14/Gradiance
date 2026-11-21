@@ -93,6 +93,8 @@ fn expected_bodies(question: &str) -> &'static [usize] {
         // floor + the merged flush pair + the merged T
         "fillet-bulge" => &[3, 3],
         "shading" => &[8, 8, 8],
+        // ground + pool + tank + box, ball, plank + the heavy ball
+        "fluid-look" => &[7, 7, 7, 7],
         _ => &[],
     }
 }
