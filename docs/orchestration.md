@@ -269,6 +269,13 @@ keys and docs with conformance tests (U-1, U-2), in-app test and control
 (U-3..U-6), then Blender-leaning polish (U-7..U-11). Its briefs interleave
 with 4b and 5; the order is in `docs/state.md`.
 
+**Phase Q — follow-ups (planned 2026-11-20, the owner's "follow-ups
+first").** Briefs Q-1..Q-8 in `docs/briefs/Q-*`, in order, cheapest and
+most visible first (roadmap list in `docs/state.md`). Q-1 screenshots
+Phase N on screen; Q-2..Q-6 close follow-ups from the N/6/J Outcomes;
+Q-7 investigates, Q-8 derives. G-2 and the rest of the G track wait
+until Phase Q is done.
+
 **Phase S — sandbox parity (audit 2026-11-20).** Gaps from
 `docs/parity-audit.md`, briefs S-1..S-9 in number order (roadmap §
 "Sandbox parity"). Runs after Phase Q; independent of G-0 and 3D-0. S-8

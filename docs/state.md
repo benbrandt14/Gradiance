@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-20 (G-1 handoff; before that G-0 plan handoff; before that J-2 handoff; before that P-1 perf handoff: islands/sleeping re-enabled with wake seams, per-frame O(N) costs cached/gated, fixed-catchup clamp — brief `docs/briefs/P-1-concurrent-objects.md`, branch `perf/max-concurrent-objects`; before that 6-3 handoff, Phase 6 complete; before that 6-2; before that 6-1, N-9, Phase N complete; before that N-8, N-7, N-6, N-5, N-4, N-3, N-2, N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
+Last updated: 2026-11-20 (Phase Q planned; before that the parity audit and Phase S briefs (#298); before that the G-1 handoff (#297); before that the G-0 plan (#296); before that the J-2 handoff (#293); before that P-1 perf handoff: islands/sleeping re-enabled with wake seams, per-frame O(N) costs cached/gated, fixed-catchup clamp — brief `docs/briefs/P-1-concurrent-objects.md`, branch `perf/max-concurrent-objects` (#300); before that 6-3 handoff, Phase 6 complete; before that 6-2; before that 6-1, N-9, Phase N complete; before that N-8, N-7, N-6, N-5, N-4, N-3, N-2, N-1; before that R-4, Phase R complete; before that R-3, R-2, R-1; before that, the phase gate after the stack #257–#264, main
 3f211ab; six review answers ingested; order per
 `docs/unified-surface-plan.md` § 10 and § 13).
 
@@ -14,7 +14,30 @@ Last updated: 2026-11-20 (G-1 handoff; before that G-0 plan handoff; before that
   brief's Outcome records its decisions; read it before touching that area.
 - **Queued:** **Phase S** sandbox parity (audit 2026-11-20,
   `docs/parity-audit.md`; briefs S-1..S-9, after Phase Q).
-- **Now:** **G-1 the graph IR crate is done** (merged #297, on the G-0
+- **Now:** **Phase Q (follow-ups)**, planned per the owner's choice on
+  2026-11-20 ("follow-ups first", before the next planning stage). The
+  G-0 decision (#296) and the G-1 graph IR crate (#297) are merged as
+  planning artifacts: nothing in the app uses `gradiance-graph` yet —
+  do not depend on it until Phase Q is done; 3D-0 is on hold. Briefs
+  `docs/briefs/Q-*`, in
+  order: **Q-1** Phase N on screen (screenshot every Phase N tool, glyph,
+  block and settings row, fix what is wrong; ingest the waiting answers
+  `toon-ramp` = hard bands, `status-bar-and-pie` = on) — **ready**;
+  **Q-2** `signal.bind` / `signal.unbind` on today's name-based bindings;
+  **Q-3** File ▸ New keeps the workstation config, mirror rows in the
+  context menu, thinned chain strokes; **Q-4** laser block on the node
+  canvas, "Add to node editor" for joints and nodes, laser target from the
+  selection, free laser names; **Q-5** a fluid acts only in its depth
+  band, a water surface line, a translucent sea; **Q-6** aerodynamic
+  torque and angular drag (hull panel drag); **Q-7** chain link buzz next
+  to a world pin (investigation); **Q-8** a derived contour per body (no
+  per-frame `polygonize`). Each is "after" the one before it. Seven plan
+  decisions in `archive.ron` (`phase-q-order`, `signal-bind-shape`,
+  `new-scene-keeps-workstation`, `fluid-depth-scope` (supersedes
+  `fluid-scope`), `fluid-surface-look`, `aero-panel-drag`,
+  `laser-block`); no new review question (the water surface is reviewed
+  on the Q-5 PR screenshots).
+  **Before that:** **G-1 the graph IR crate is done** (merged #297, on the G-0
   decision #296): the new pure
   crate `gradiance-graph` (`graph → core, domain`; DAG row and serde
   allowlist row in `tests/boundaries.rs`) holds the IR (nodes by
@@ -27,7 +50,7 @@ Last updated: 2026-11-20 (G-1 handoff; before that G-0 plan handoff; before that
   Every `BlockOp` and RPN signal converts and lowers `==` to today's
   expression (16 tests, one proptest). Nothing in the app uses it; no
   format change. Five decisions in `archive.ron` (`graph-*`).
-  **Next: G-2** the graph becomes scene content
+  **G-2 (after Phase Q)** the graph becomes scene content
   (`docs/briefs/G-2-graph-scene-content.md`, status ready; `FORMAT_VERSION`
   9; `graph.*` operations; saved positions; `docs/nodes.md`).
   **Before that, G-0 one graph model: plan written** (merged #296). Decision
@@ -124,8 +147,7 @@ Last updated: 2026-11-20 (G-1 handoff; before that G-0 plan handoff; before that
   rotation lock stops the spin (`stop_locked_spin`), a hinge on a snapped
   edge joins both bodies, a spring from empty space pins its start, a
   hinge on a bare ground makes nothing; six decisions in `archive.ron`.
-  **N-8** laser node is done (in review; branch
-  `claude/project-thread-tw1mvl-n8`): `NodeKind::Laser` (bus name, target
+  **N-8** laser node is merged (#289): `NodeKind::Laser` (bus name, target
   body, axis in the body's frame, range 50 m, 8 bounces, cap 32) casts its
   beam through avian's `SpatialQuery` (`physics::queries::cast_beam`) and
   reflects off every solid body (pure `geometry::beam`);
@@ -138,8 +160,7 @@ Last updated: 2026-11-20 (G-1 handoff; before that G-0 plan handoff; before that
   (`node.laser`); a 45-degree beam off a mirror wall reaches the target
   geometry put on the reflected ray (test); six decisions in
   `archive.ron`.
-  **N-7** buoyancy is done (in review; branch
-  `claude/project-thread-tw1mvl-n7`): an authored `domain::fluid::Fluid`
+  **N-7** buoyancy is merged (#288): an authored `domain::fluid::Fluid`
   (areal density, default 2 kg/m², and drag rate, default 2/s) on any
   body; every dynamic body overlapping it is pushed up by `ρgA` at the
   submerged centroid and damped (`physics::buoyancy::apply_buoyancy`, one
@@ -150,8 +171,7 @@ Last updated: 2026-11-20 (G-1 handoff; before that G-0 plan handoff; before that
   also make the body a static sensor in the same undo step; fluids draw
   translucent; a half-density box floats half submerged (measured within
   0.1 %); eight decisions in `archive.ron`.
-  **N-6** sketch tool is done (in review; branch
-  `claude/project-thread-tw1mvl-n6`): drag freehand; release makes one
+  **N-6** sketch tool is merged (#287): drag freehand; release makes one
   body: the stroke simplified (RDP) into at most 24 capsules joined as one
   balanced SDF union (a straight stroke is one capsule), or a filled
   polygon when it ends near its start and encloses an area; one
@@ -162,8 +182,7 @@ Last updated: 2026-11-20 (G-1 handoff; before that G-0 plan handoff; before that
   tree with a thin capsule finer, within the existing sample count
   (`field_cell`), and evaluates unions faster (`sdf::UnionField`, exact);
   six decisions in `archive.ron`.
-  **N-5** chain tool is done (in review; branch
-  `claude/project-thread-tw1mvl-n5`): drag a path, release lays capsule
+  **N-5** chain tool is merged (#286): drag a path, release lays capsule
   links (link length, width and end pins in Settings > Grid & Snap >
   Tools; pins free / to bodies / to bodies or the world) hinged end to end,
   one `spawn-chain` undo step through the new `body.chain` operation
@@ -171,8 +190,7 @@ Last updated: 2026-11-20 (G-1 handoff; before that G-0 plan handoff; before that
   `SpawnRodCommand` generalised to many bodies; Chain palette entry in
   Connect, no key; a chain pinned at both ends hangs within 2.5 % of the
   catenary sag (test); six decisions in `archive.ron`.
-  **N-4** air drag and wind is done (in review; branch
-  `claude/project-thread-tw1mvl-n4`): `SimSettings` gains `air_density`,
+  **N-4** air drag and wind is merged (#285): `SimSettings` gains `air_density`,
   `drag_coefficient`, `linear_drag` and `wind` (scene content; drag off by
   default, so old scenes behave the same); quadratic and linear drag scale
   with the body's projected width across the relative air velocity, read
@@ -180,8 +198,7 @@ Last updated: 2026-11-20 (G-1 handoff; before that G-0 plan handoff; before that
   (`geometry::profile`); `physics::air::apply_air_drag`, one allocation-free
   `FixedUpdate` system; Settings > Simulation > Air; `sim-set` paths; five
   decisions in `archive.ron`.
-  **N-3** thruster node is done (in review; branch
-  `claude/project-thread-tw1mvl-n3`): `NodeKind::Thruster` (thrust in N, an
+  **N-3** thruster node is merged (#284): `NodeKind::Thruster` (thrust in N, an
   axis in the body's frame) pushes its body at its point
   (`physics::thrust::apply_thrusters`, one allocation-free `FixedUpdate`
   system, once per step); the Thruster tool (no key; click pushes up, a drag
@@ -189,8 +206,7 @@ Last updated: 2026-11-20 (G-1 handoff; before that G-0 plan handoff; before that
   thruster block on the node canvas; `(thruster body x y angle thrust)`
   (`node.thruster`); duplicate copies a thruster's drive; node glyphs are
   screen-sized now; six decisions in `archive.ron`.
-  **N-2** graph input keys is done (in review; branch
-  `claude/project-thread-tw1mvl-n2`): a node-graph **Key** block
+  **N-2** graph input keys is merged (#283): a node-graph **Key** block
   (`BlockOp::Key`, scene content via `ComputedSignals`) reads 1 (or
   -1/0/1 for a pair) while its key is held in play, published as derived
   `key@<name>` bus inputs by `interaction::graph_keys`; paused or with a
@@ -199,8 +215,7 @@ Last updated: 2026-11-20 (G-1 handoff; before that G-0 plan handoff; before that
   a capture button and clash warnings in the block footer; `(defkey …)`
   and `(ui-key key [hold])`; new edge interaction → signal; six decisions
   in `archive.ron`.
-  **N-1** signal actuators is done (in review; branch
-  `claude/project-thread-tw1mvl-n1`): bindings drive a hinge/slider motor's
+  **N-1** signal actuators is merged (#282): bindings drive a hinge/slider motor's
   speed and cap, a body's field strength and gravity scale through the
   derived `physics::drive::SignalDrive` (never saved, never undone;
   unbinding restores the authored value); one allocation-free actuator
@@ -282,12 +297,12 @@ Last updated: 2026-11-20 (G-1 handoff; before that G-0 plan handoff; before that
      click resets every number field (done, #268), **4b-5** toon bands on the bodies
      (done, #270; both from owner notes, 2026-11-19), then **5-5** (done,
      #271; `docs/frames-decision.md`, `docs/curvilinear-tools-decision.md`).
-  9b. **R-1** (done, #278), **R-2** (done), **R-3** (done, #280), **R-4** (done, in review) run & read surface (owner-ranked 2026-11-19; roadmap
+  9b. **R-1** (done, #278), **R-2** (done, #279), **R-3** (done, #280), **R-4** (done, #281) run & read surface (owner-ranked 2026-11-19; roadmap
       § "Run & read surface", briefs `docs/briefs/R-*`): run/step/save/
       load/dump/export operations, the headless `gradiance run`,
       insert + clipboard, packing as an operation.
-  9c. **N-1** (done, in review), **N-2** (done, in review), **N-3** (done,
-      in review), **N-4** (done, in review), **N-5** (done, in review), **N-6** (done, in review), **N-7** (done, in review), **N-8** (done, in review), **N-9** (done, in review; Phase N complete) nonlinear dynamics & multibody play (owner-approved
+  9c. **N-1** (done, #282), **N-2** (done, #283), **N-3** (done,
+      #284), **N-4** (done, #285), **N-5** (done, #286), **N-6** (done, #287), **N-7** (done, #288), **N-8** (done, #289), **N-9** (done, #291; Phase N complete) nonlinear dynamics & multibody play (owner-approved
       2026-11-19; roadmap § "Nonlinear dynamics & multibody play",
       briefs `docs/briefs/N-*`): signal actuators, graph input keys,
       thruster, drag + wind, chain, sketch, buoyancy, laser, mirror +
@@ -299,10 +314,16 @@ Last updated: 2026-11-20 (G-1 handoff; before that G-0 plan handoff; before that
       editor areas + saved workspaces (done, #275); **U-11** Adjust
       Last Operation (done, #276).
   11. **Phase 6** (testing & diagnostics): **6-1**, **6-2**, **6-3**
-      (`docs/briefs/6-*`).
-  12. Next planning stage: **G-0** one graph model (plan written,
-      2026-11-20: `docs/graph-model-decision.md`; phases **G-1** graph IR
-      crate (brief ready), **G-2** graph as scene content, **G-3**
+      (`docs/briefs/6-*`); **P-1** max concurrent objects at 60 fps
+      (done, #300); **J-1** joint stress test (done, #290), **J-2**
+      cut/select/boolean stress test (done, #293).
+  12. **Phase Q** (follow-ups, owner choice 2026-11-20): **Q-1** .. **Q-8**
+      (`docs/briefs/Q-*`), in order. **Phase S** sandbox parity (audit
+      `docs/parity-audit.md`, briefs S-1..S-9) follows Phase Q.
+  13. Next planning stage (held until Phase Q is done): **G-0** one graph
+      model (plan written, 2026-11-20: `docs/graph-model-decision.md`,
+      merged #296; phases **G-1** graph IR
+      crate (done, #297), **G-2** graph as scene content, **G-3**
       bindings as edges, **G-4** parametric shapes, **G-5** Lisp view,
       **G-6** Graphite review), **3D-0** the 3D plan, **D-2** egui 0.37
       once bevy_egui ships it.
@@ -369,8 +390,8 @@ feature is different: it gets a brief, as 2-5 and 4-4 did.
   - torque-based breaking (2-2);
   - rod fixed end = merge, `spawn-rod`, rod inspector (2-3);
   - joint node-graph block (2-1): a minimal one landed with N-1 (sensor
-    outputs, motor inputs); editing, "add to node editor" and layout remain;
-  - `signal.bind` / `signal.unbind` operations (N-1 Outcome);
+    outputs, motor inputs); editing and layout remain ("add to node editor": Q-4);
+  - `signal.bind` / `signal.unbind` operations: moved to brief Q-2;
   - short gravity-loaded arms lose motor speed (0.1 m arm ~27% slowest);
     substeps and the ceiling are not the cause (A-2 Outcome, proposal);
   - field strength does not scale with the source size (fixed 1 m falloff,
