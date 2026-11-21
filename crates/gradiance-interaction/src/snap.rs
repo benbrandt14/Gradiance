@@ -7,12 +7,14 @@
 
 use crate::cursor::CursorWorldPos;
 use bevy::prelude::*;
+use gradiance_core::states::GameState;
 use gradiance_domain::Body;
 use gradiance_domain::settings::{GridSettings, GridSystem, SnapConfig};
 use gradiance_domain::shape::ShapeDef;
+use gradiance_geometry::polygonize::ShapeContours;
 use gradiance_geometry::snap_features::{
-    SnapOutline, capsule_tangent_points, nearest_on_capsule, nearest_on_circle, snap_outline,
-    tangent_points, tangent_radius,
+    SnapOutline, capsule_tangent_points, nearest_on_capsule, nearest_on_circle,
+    snap_outline_cached, tangent_points, tangent_radius,
 };
 use gradiance_geometry::snapping::{
     adaptive_step, cartesian_snap, isometric_snap, polar_snap, project_on_segment,
@@ -136,18 +138,39 @@ impl Nearest {
 /// Object snaps win over the grid: a tangent (only while a
 /// [`SnapReference`] is set) first, then vertex > midpoint > center > edge
 /// by proximity; the capture radius is screen-constant (scales with zoom).
+///
+/// While the simulation is paused and nothing the snap reads has changed
+/// (cursor, config, grid, reference, exclusions), the previous result is
+/// still exact, so the collider scan is skipped — that scan is a linear
+/// pass over every collider, which is what a paused editor of a large
+/// scene paid every frame. While playing, bodies move under a still
+/// cursor and the scan runs every frame. A body teleported by a command
+/// while paused is re-snapped on the next cursor move.
 pub fn update_snapped_cursor(
     cursor: Res<CursorWorldPos>,
     grid: Res<GridSettings>,
     config: Res<SnapConfig>,
     exclusions: Res<SnapExclusions>,
     reference: Res<SnapReference>,
+    state: Res<State<GameState>>,
     physics: PhysicsQueries,
-    bodies: Query<(&ShapeDef, &Transform), With<Body>>,
+    bodies: Query<(&ShapeDef, &ShapeContours, &Transform), With<Body>>,
     cam_scale: Res<crate::camera::CameraScale>,
     mut out: ResMut<SnappedCursor>,
+    mut last_raw: Local<Option<Vec2>>,
 ) {
     let raw = cursor.0;
+    if *state.get() == GameState::Paused
+        && raw == *last_raw
+        && out.raw == raw
+        && !config.is_changed()
+        && !grid.is_changed()
+        && !exclusions.is_changed()
+        && !reference.is_changed()
+    {
+        return;
+    }
+    *last_raw = raw;
     *out = SnappedCursor {
         raw,
         position: raw,
@@ -172,10 +195,18 @@ pub fn update_snapped_cursor(
             if exclusions.0.contains(&entity) {
                 continue;
             }
-            let Ok((shape, transform)) = bodies.get(entity) else {
+            let Ok((shape, contours, transform)) = bodies.get(entity) else {
                 continue;
             };
-            body_candidates(&mut nearest, p, shape, transform, &config, line_from);
+            body_candidates(
+                &mut nearest,
+                p,
+                shape,
+                contours,
+                transform,
+                &config,
+                line_from,
+            );
         }
         if let Some(DraftReference::Radius(center)) = reference.0 {
             // Any body the growing circle could touch at this radius, not
@@ -186,10 +217,10 @@ pub fn update_snapped_cursor(
                 if exclusions.0.contains(&entity) {
                     continue;
                 }
-                let Ok((shape, transform)) = bodies.get(entity) else {
+                let Ok((shape, contours, transform)) = bodies.get(entity) else {
                     continue;
                 };
-                tangent_radius_candidate(&mut nearest, p, center, shape, transform);
+                tangent_radius_candidate(&mut nearest, p, center, shape, contours, transform);
             }
         }
 
@@ -229,6 +260,7 @@ fn body_candidates(
     nearest: &mut Nearest,
     p: Vec2,
     shape: &ShapeDef,
+    contours: &ShapeContours,
     transform: &Transform,
     config: &SnapConfig,
     line_from: Option<Vec2>,
@@ -243,7 +275,7 @@ fn body_candidates(
     if !outline_sources && line_from.is_none() {
         return;
     }
-    match snap_outline(shape) {
+    match snap_outline_cached(shape, contours) {
         // An exact circle: its real features only. Tessellation
         // vertices and midpoints are artifacts a few pixels apart
         // and made the glyph flicker along the curve (3.4).
@@ -341,9 +373,10 @@ fn tangent_radius_candidate(
     p: Vec2,
     center: Vec2,
     shape: &ShapeDef,
+    contours: &ShapeContours,
     transform: &Transform,
 ) {
-    let outline = snap_outline(shape);
+    let outline = snap_outline_cached(shape, contours);
     let Some(touch) = tangent_radius(local_point(transform, center), &outline) else {
         return;
     };

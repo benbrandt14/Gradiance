@@ -269,9 +269,22 @@ keys and docs with conformance tests (U-1, U-2), in-app test and control
 (U-3..U-6), then Blender-leaning polish (U-7..U-11). Its briefs interleave
 with 4b and 5; the order is in `docs/state.md`.
 
+**Phase Q — follow-ups (planned 2026-11-20, the owner's "follow-ups
+first").** Briefs Q-1..Q-8 in `docs/briefs/Q-*`, in order, cheapest and
+most visible first (roadmap list in `docs/state.md`). Q-1 screenshots
+Phase N on screen; Q-2..Q-6 close follow-ups from the N/6/J Outcomes;
+Q-7 investigates, Q-8 derives. G-2 and the rest of the G track wait
+until Phase Q is done.
+
+**Phase S — sandbox parity (audit 2026-11-20).** Gaps from
+`docs/parity-audit.md`, briefs S-1..S-9 in number order (roadmap §
+"Sandbox parity"). Runs after Phase Q; independent of G-0 and 3D-0. S-8
+starts with an API check and may return.
+
 **Deferred to the next planning stage** (not part of "roadmap complete"):
 `bevy_picking` interaction rework (audit D); node-canvas layout persistence
-(becomes document content if the graph becomes the document: G-0);
+(G-0 decided 2026-11-20: positions become saved, undoable node fields in
+G-2, `docs/graph-model-decision.md`);
 `bevy-persistent`; `egui_code_editor`; PR #208. *Revised 2026-11-17:* dock
 layout persistence moved into U-10 (workstation config); the UI framework
 question is settled (egui, polished).

@@ -17,6 +17,7 @@ kernel → (nothing)                  units → (nothing, +bevy for Reflect)
 core → bevy                         geometry → core
 op → core
 domain → core, geometry             scene → core, domain
+graph → core, domain
 optimize → core, geometry (+bevy for Reflect)
 physics → core, domain, geometry, units
 signal → kernel, domain, physics    command → scene, signal, op (+ lower)
@@ -55,6 +56,16 @@ is an optimization with an objective, not a simulation (see the crate docs
 for why that distinction is load-bearing). The ECS half — gathering a
 selection, stepping the run across frames, drawing the ghost, committing one
 transform command — is `interaction::pack`.
+
+`gradiance-graph` is the one graph IR (`docs/graph-model-decision.md`;
+brief G-1): nodes by `StableId`, typed ports, edges by
+`(node id, output port)`, a `NodeMeta` catalog in Graphite's vocabulary,
+validation, and two lowerings — the **signal family** (frame rate) to one
+`SignalExpr` per published node, the **shape family** (edit rate) to a
+`ShapeDef`. The rate rule: an edit-rate input never takes a frame-rate
+output, so a param may size a box but a sensor never resizes a collider.
+Like `geometry` it has no systems and no queries; every value in it is
+plane-local. Nothing in the app uses it until G-2.
 
 Rationale, coupling data, and the roadmap→package feature tree:
 `docs/workspace-plan.md`.

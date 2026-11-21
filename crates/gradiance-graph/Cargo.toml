@@ -1,0 +1,26 @@
+[package]
+name = "gradiance-graph"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Gradiance graph IR: one node graph for signals and parametric shapes"
+
+[lints]
+workspace = true
+
+[dependencies]
+gradiance-core.workspace = true
+gradiance-domain.workspace = true
+# Bevy surface is deliberately minimal: `Reflect` derives on the IR and a
+# `Resource` derive on `Graph` (inserted from G-2 on). No systems, no
+# queries, no plugin lives in this crate.
+bevy.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+# Features-only: serde impls for the bevy math types the IR serializes.
+glam.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+ron.workspace = true
+uuid.workspace = true
