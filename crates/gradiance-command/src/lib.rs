@@ -262,6 +262,7 @@ impl CommandStack {
         // Differential restore: only what this command changed is written, so
         // bodies that have settled under simulation keep their live poses.
         self.states[to].restore_diff(&self.states[from], world);
+        settle_restored_poses(&self.states[to], &self.states[from], world);
         self.cursor = to;
         self.revision += 1;
         debug!(name = undone, "command undone");
@@ -276,6 +277,7 @@ impl CommandStack {
         }
         let (from, to) = (self.cursor, self.cursor + 1);
         self.states[to].restore_diff(&self.states[from], world);
+        settle_restored_poses(&self.states[to], &self.states[from], world);
         self.cursor = to;
         self.revision += 1;
         let redone = self.labels[to];
@@ -352,6 +354,36 @@ pub struct HistoryInfo {
     pub undo_label: Option<&'static str>,
     /// What the next redo would re-apply.
     pub redo_label: Option<&'static str>,
+}
+
+/// Stops every body whose pose an undo or redo just restored (brief Q-1).
+///
+/// Velocity is simulation state, not authored, so the snapshot restore
+/// writes the pose and leaves the motion of the run behind: undoing a run
+/// put bodies back at their pre-run poses still moving at their end-of-run
+/// speeds, and the next play launched them. A restored pose is a pose at
+/// rest; bodies the step did not move keep their live motion.
+fn settle_restored_poses(to: &SceneRecord, from: &SceneRecord, world: &mut World) {
+    use avian2d::prelude::{AngularVelocity, LinearVelocity};
+    let before: std::collections::HashMap<StableId, _> = from
+        .bodies
+        .iter()
+        .map(|body| (body.id, &body.pose))
+        .collect();
+    let moved: Vec<StableId> = to
+        .bodies
+        .iter()
+        .filter(|body| before.get(&body.id).is_some_and(|pose| **pose != body.pose))
+        .map(|body| body.id)
+        .collect();
+    for id in moved {
+        let Some(entity) = world.resource::<IdIndex>().entity(id) else {
+            continue;
+        };
+        if let Ok(mut entity) = world.get_entity_mut(entity) {
+            entity.insert((LinearVelocity::ZERO, AngularVelocity::ZERO));
+        }
+    }
 }
 
 /// Records the just-finished simulation run as one undo step (see
