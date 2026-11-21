@@ -4426,5 +4426,90 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "tests/boundaries.rs serialization_is_confined_to_authored_data",
         ),
+        (
+            question: (
+                id: "parity-gap-scope",
+                title: "Which parity gaps get a brief?",
+                source: "Sandbox parity audit (docs/parity-audit.md)",
+                description: r#"The audit found about 40 gaps against the reference sandbox. Some reuse an existing seam (inspector field, operation, signal source, pure geometry); others need a new solver or renderer."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Brief only seam-reusing gaps",
+                        caption: r#"Nine S briefs; particle water, soft bodies, image geometry go to the Horizon; the rest is declined with a reason."#,
+                    ),
+                    (
+                        label: "Brief every gap",
+                        caption: r#"Adds solver-sized briefs (particle water, soft bodies) that the planner already did not recommend on 2026-11-19."#,
+                    ),
+                    (
+                        label: "Audit only, no briefs",
+                        caption: r#"Leaves the roadmap without the gaps the owner asked to add."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "parity-gap-scope",
+                title: "Which parity gaps get a brief?",
+                choice: Picked("Brief only seam-reusing gaps"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "docs/briefs/S-1..S-9",
+        ),
+        (
+            question: (
+                id: "gear-as-geometry",
+                title: "Is a gear a constraint or an outline?",
+                source: "Sandbox parity audit (docs/parity-audit.md)",
+                description: r#"The 2026-11-19 plan did not recommend gears because avian has no known gear constraint. The reference sandbox makes gears as toothed outlines that mesh by contact."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Toothed outline, contact meshing",
+                        caption: r#"A Polygon leaf built at commit; no new constraint, no new SDF leaf. Risk: chatter at high speed, measured by the worker."#,
+                    ),
+                    (
+                        label: "Gear-ratio constraint",
+                        caption: r#"Needs a custom avian constraint; unverified and larger."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "gear-as-geometry",
+                title: "Is a gear a constraint or an outline?",
+                choice: Picked("Toothed outline, contact meshing"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "docs/briefs/S-5-gear-shape.md",
+        ),
+        (
+            question: (
+                id: "removal-during-run",
+                title: "How does removal on contact or after a time stay inside the command rule?",
+                source: "Sandbox parity audit (docs/parity-audit.md)",
+                description: r#"Despawning an authored body during a run is a world mutation outside commands (invariant 1)."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Derived marker for the run",
+                        caption: r#"A derived marker disables the collider and hides the mesh; undo of the run, stop or load clears it. No authored change."#,
+                    ),
+                    (
+                        label: "Despawn and rely on run undo",
+                        caption: r#"Breaks invariant 1 and the undo matrix."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "removal-during-run",
+                title: "How does removal on contact or after a time stay inside the command rule?",
+                choice: Picked("Derived marker for the run"),
+                note: "Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it.",
+                answered_at: "2026-11-20T00:00:00Z",
+            ),
+            ingested_as: "docs/briefs/S-7-contact-events-lifetime.md",
+        ),
     ],
 )

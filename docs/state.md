@@ -12,6 +12,8 @@ Last updated: 2026-11-20 (G-1 handoff; before that G-0 plan handoff; before that
   CSG booleans/fillet, M19 render + chrome). Phase 2's backlash, cams and
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
+- **Queued:** **Phase S** sandbox parity (audit 2026-11-20,
+  `docs/parity-audit.md`; briefs S-1..S-9, after Phase Q).
 - **Now:** **G-1 the graph IR crate is done** (merged #297, on the G-0
   decision #296): the new pure
   crate `gradiance-graph` (`graph → core, domain`; DAG row and serde

@@ -657,6 +657,33 @@ Examples menu ("this isn't an educational tool"). **Not recommended by the
 planner:** gears (no avian gear constraint known; unverified), particle
 water, a time scrubber (undo already reverts a run).
 
+## Sandbox parity (audit 2026-11-20, briefs S-1..S-9)
+
+The parity audit (`docs/parity-audit.md`) checks every tool, menu and
+object option of the reference sandbox against `main`. Most are present.
+Each gap below reuses an existing seam; one brief each, in this order:
+
+1. **S-1** authored initial velocity and spin (inspector dial, verbs).
+2. **S-2** readouts (area, inertia, potential energy, acceleration), XY
+   phase plots, per-body velocity/momentum/force arrows.
+3. **S-3** laser refraction (refractive index, Snell, total internal
+   reflection) and beam colour.
+4. **S-4** material presets, default material for new bodies, mass entry.
+5. **S-5** gear outline + gear tool (meshing by contact, no constraint).
+6. **S-6** context quick actions: loosen, centre pin, centre thruster,
+   to circle, motor brake.
+7. **S-7** contact hit pulse signal, removal on contact, time to live
+   (derived for the run, undone with it).
+8. **S-8** surface velocity (conveyor); returns if avian 0.8 has no
+   contact tangent speed.
+9. **S-9** camera follow, frame selection, camera verbs.
+
+**Declined by the audit** (reasons in the audit): particle water and
+liquify, soft bodies, textures and image geometry, dispersion, sketch
+gestures and brush erase, file thumbnails, online sharing, language
+choice, joystick, multi-touch, air buoyancy. The first three are on the
+Horizon below.
+
 ## Scripting & symbolic modeling (design accepted)
 
 Direction is ratified in `docs/script-lisp-decision.md`: a Lisp/DSL over a
@@ -1025,6 +1052,14 @@ them and cross-cutting passes leave the right seams.
   camera scale since the P2 flip) and the coordinate-frames path
   (`docs/frames-decision.md`: the `PlaneFrame` lift and its ratchet, F1–F3,
   come first; authored planes, F4, arrive with the engine decision).
+
+- **Particle fluids, soft bodies, image geometry** (parity audit,
+  2026-11-20). Particle water with "liquify" needs a particle solver
+  coupled to avian and its own renderer (the Tier-B kernel de-risks only
+  the maths); soft bodies need a new solver (a spring lattice is already
+  scriptable); geometry from an image needs a sampled-field SDF leaf,
+  because `polygonize` is the single discretization point, and textures
+  conflict with the toon look direction.
 
 ## Backlog / later
 
