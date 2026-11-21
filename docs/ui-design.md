@@ -415,7 +415,7 @@ settings to its preset; editing those afterwards keeps the look.
 
 | Look | Name | Backdrop | Pieces | Light | Bands |
 |---|---|---|---|---|---|
-| Clay studio (default) | `studio` | warm light grey | clay tones (OKLCH L 0.585), dark warm outlines | warm key + cool fill, both shadowing | 5-stop ramp (mauve shadows, cream lit patch), dither, relief, rim 0.2, matte |
+| Clay studio (default) | `studio` | warm light grey | clay tones (OKLCH L 0.585), dark warm outlines | warm key + cool fill, both shadowing | 5-stop ramp (mauve shadows, cream lit patch), hard bands (dither 0, review `toon-ramp`), relief, rim 0.2, matte |
 | Blueprint | `blueprint` | navy | pale chalk tones (L 0.84), navy ink outlines | one cool key | 3 cool stops, rim 0.35, flat faces |
 | Flat graphic | `poster` | paper white | bold tones (L 0.615), black outlines | one key | 2 stops, no rim, flat faces |
 

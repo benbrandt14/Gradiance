@@ -4878,5 +4878,76 @@ The first plan moved that snapshot into the new bottom crate `gradiance-op`. It 
             ),
             ingested_as: "docs/roadmap.md Unified plan; docs/state.md; docs/orchestration.md",
         ),
+        (
+            question: (
+            id: "toon-ramp",
+            title: "How should a body's toon bands meet: dithered, pixel grain, or hard?",
+            source: "Owner direction 2026-11-19 with a reference image (docs/briefs/assets/4b-6-reference.gif); brief 4b-6",
+            description: r#"The toon shader now follows your reference (docs/briefs/assets/4b-6-reference.gif): lighting indexes a colour ramp shared by every body, the default is matte (no glint), shadows shift hue toward a cool mauve, a face turned to the key light gets a warm cream patch, and the light falloff comes from the shape: each front face is lit as a rounded body from its distance to its outline, so a circle reads as a dome and a box as a slab with lit, chamfered edges (lighting only; the outline and the physics stay flat).
+
+    The ramp is in Settings > Rendering > Ramp: drag the stop markers, double-click the bar to add a stop, right-click one to remove it, pick a stop's tone, switch Constant and Linear; the strips under the bar show three palette fills through it. Mid grey shows a fill as authored, darker tones multiply, lighter ones brighten. "relief" and "bevel" set how round the faces are.
+
+    The options differ only in how two bands meet. Zoom in on the circles and the boxes (mouse wheel) to see the grain, compare with the reference, then press play and watch the bands follow the bodies."#,
+            options: [
+                (
+                    label: "Ramp + dither",
+                    caption: "The new default: band edges break into a fine ordered (Bayer) pattern, 2-pixel cells, over a narrow zone (dither 0.025).",
+                    scripts: ["scenes/look/scene.scm", "scenes/toon-highlights/polygon.scm", "scenes/look/colour.scm", "scenes/look/glow.scm", "scenes/toon-highlights/polygon-cut.scm"],
+                ),
+                (
+                    label: "Ramp + pixel grain",
+                    caption: "A wider zone in chunky 4-pixel cells (dither 0.06, dither_scale 4): a pixel-art grain at every band edge.",
+                    scripts: ["scenes/look/scene.scm", "scenes/toon-highlights/polygon.scm", "scenes/look/colour.scm", "scenes/look/glow.scm", "scenes/toon-highlights/polygon-cut.scm"],
+                    settings: (render: (dither: 0.06, dither_scale: 4.0)),
+                ),
+                (
+                    label: "Ramp, hard bands",
+                    caption: "No dither (dither 0): each band edge is a clean line, as in the reference image.",
+                    scripts: ["scenes/look/scene.scm", "scenes/toon-highlights/polygon.scm", "scenes/look/colour.scm", "scenes/look/glow.scm", "scenes/toon-highlights/polygon-cut.scm"],
+                    settings: (render: (dither: 0.0)),
+                ),
+            ],
+        ),
+            answer: (
+            question: "toon-ramp",
+            title: "How should a body\'s toon bands meet: dithered, pixel grain, or hard?",
+            choice: Picked("Ramp, hard bands"),
+            note: "All of these are actually pretty good. We can deep dive more visuals later but we\'ll go with the hard bands for now.",
+            answered_at: "2026-11-20T02:08:50Z",
+            revision: "cff98a92dd44",
+        ),
+            ingested_as: "Default dither 0 (STUDIO_DITHER = 0.0; the setting and its slider stay), brief Q-1.",
+        ),
+        (
+            question: (
+            id: "status-bar-and-pie",
+            title: "Should the status bar show by default, and do the tools pie and F3 feel right?",
+            source: "Brief U-9 (F3 search, status bar, pie menus; docs/unified-surface-plan.md section 7.2)",
+            description: r#"Three new surfaces read the operation registry. The status bar along the bottom edge names the active tool and its key, the tool's mouse gestures, F3 and Q, and at the right the selection count and Playing or Paused. It takes 22 points of height from the scene. F3 opens a search over every operation a click can run; greyed rows say why. Q held over the canvas opens a pie of eight tools (Select at the top, then clockwise Box, Circle, Polygon, Cut, Spring, Hinge, Drag): release over a slice to pick it, release back in the centre to cancel; a quick tap keeps the pie open for a click.
+
+    The options differ only in whether the status bar shows. In both, try a few tools from the pie (hold Q, flick, release) and from F3 (type "box", Enter), and watch the status bar's hints change with the tool. A note on the pie's size (labels about 92 points from the centre), its slices or the hints is welcome."#,
+            options: [
+                (
+                    label: "Status bar on",
+                    caption: "As built: the bar shows by default. View > Status bar hides it.",
+                    scripts: ["scenes/status-bar-and-pie/scene.scm", "scenes/status-bar-and-pie/shown.scm"],
+                ),
+                (
+                    label: "Status bar off",
+                    caption: "The bar is hidden until View > Status bar turns it on; the scene gets the 22 points back.",
+                    scripts: ["scenes/status-bar-and-pie/scene.scm", "scenes/status-bar-and-pie/hidden.scm"],
+                ),
+            ],
+        ),
+            answer: (
+            question: "status-bar-and-pie",
+            title: "Should the status bar show by default, and do the tools pie and F3 feel right?",
+            choice: Picked("Status bar on"),
+            note: "",
+            answered_at: "2026-11-20T02:09:37Z",
+            revision: "cff98a92dd44",
+        ),
+            ingested_as: "No change: the status bar already shows by default (crates/gradiance-ui/src/status_bar.rs), brief Q-1.",
+        ),
     ],
 )
