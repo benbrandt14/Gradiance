@@ -279,9 +279,10 @@ Q-7 investigates, Q-8 derives. G-2 and the rest of the G track wait
 until Phase Q is done.
 
 **Phase S — sandbox parity (audit 2026-11-20).** Gaps from
-`docs/parity-audit.md`, briefs S-1..S-9 in number order (roadmap §
-"Sandbox parity"). Runs after Phase Q; independent of G-0 and 3D-0. S-8
-starts with an API check and may return.
+`docs/parity-audit.md`, briefs S-1..S-22 in number order, S-4 rejected
+(roadmap § "Sandbox parity"). Runs after Phase Q; independent of G-0 and
+3D-0. S-8 starts with an API check and may return; S-10 is a spike with a
+decision note and gates S-11; S-15 follows S-3.
 
 **Phases C, E, H, T, B — the VectorCraft port (planned 2026-11-21).**
 Owner direction: take the features surveyed in `docs/vectorcraft-survey.md`

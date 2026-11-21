@@ -15,7 +15,7 @@ earlier history is in git).
   planar contact are still undefined (retained below). PRs #212–#235. Each
   brief's Outcome records its decisions; read it before touching that area.
 - **Queued** (one ordered list: `docs/roadmap.md` § "Unified plan",
-  2026-11-21): **Phase S** sandbox parity (S-1..S-9, after Phase Q) →
+  2026-11-21): **Phase S** sandbox parity (S-1..S-22, S-4 rejected, after Phase Q) →
   **C** construction & measurement (C-1..C-6) → **E** editable paths /
   splines (E-1..E-7) → **H** shape finishing (H-1..H-3) → **T** arrays
   rebuilt (T-0 decision with a review question, then T-1..T-5, stubs until
@@ -44,7 +44,7 @@ earlier history is in git).
   (`selection_box` reads `ShapeContours`; P-1 had built the cache).
   **Next:** proposed **Q-9**
   (Q-1 Outcome: fills lost after the chain tool), which still needs a
-  brief; then **Phase S** (S-1..S-9).
+  brief; then **Phase S** (S-1..S-22, S-4 rejected).
   **Before that:** **G-1 the graph IR crate is done** (merged #297, on the G-0
   decision #296): the new pure
   crate `gradiance-graph` (`graph → core, domain`; DAG row and serde
@@ -327,7 +327,7 @@ earlier history is in git).
       cut/select/boolean stress test (done, #293).
   12. **Phase Q** (follow-ups, owner choice 2026-11-20): **Q-1** .. **Q-8**
       (`docs/briefs/Q-*`), in order. **Phase S** sandbox parity (audit
-      `docs/parity-audit.md`, briefs S-1..S-9) follows Phase Q.
+      `docs/parity-audit.md`, briefs S-1..S-22, S-4 rejected) follows Phase Q.
   12b. **VectorCraft port** (planned 2026-11-21, owner direction; roadmap
       § "Unified plan"): **C-1..C-6**, **E-1..E-7**, **H-1..H-3**,
       **T-0..T-5**, then the G track below, then **B-0..B-4** (B-1 =
