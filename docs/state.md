@@ -364,6 +364,10 @@ earlier history is in git).
     real slider widget is retained (UI/render).
   - **Format and UI may change freely** (2026-11-16): bump `FORMAT_VERSION`,
     reject older files, regenerate goldens, no migrations.
+  - **Open a PR at the end of every feature cycle** (2026-11-21), so CI
+    has time to run, and review new features on lavapipe screenshots
+    (`tools/screenshot/`) to the needed polish before hand-off; post what
+    the shots show on the PR.
   - **Merge freely when CI is green** and no tests or checks were removed to
     get there (2026-11-16).
   - **Orchestrator rotation at gates is skipped.**
