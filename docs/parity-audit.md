@@ -58,7 +58,7 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Collision layers (check/uncheck all) | present | `DepthBand` ≡ layer, Depth panel, context menu Depth |
 | Material for new objects | rejected | owner, 2026-11-21 (with presets) |
 | Colour palettes, skins | present | colour presets (`appearance.rs`), looks, chrome presets |
-| Velocity menu: show velocity / momentum / force arrows | partial | `debug.velocities` (global only). Per body, plus momentum and force: **S-2b** |
+| Velocity menu: show velocity / momentum / force arrows | done | **S-2b** (per body: Appearance arrows, `set-arrows`; `debug.velocities` stays the global overlay) |
 | Direction picker for velocity | done | **S-1** (#306: inspector Starting motion dial) |
 | File load / save / new | present | `load-scene`, `save-scene`, `new-scene`, File menu |
 | File browser with thumbnails | missing | **S-17** |

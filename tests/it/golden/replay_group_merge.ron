@@ -205,6 +205,7 @@
             zoom_step: 0.94,
             pan_speed: 600.0,
             orbit_speed_deg: 0.3,
+            arrow_scale: 0.25,
         ),
         render: (
             look: Studio,

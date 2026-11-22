@@ -503,6 +503,13 @@ fn camera_tab(ui: &mut egui::Ui, camera: &mut CameraSettings) -> bool {
             &mut camera.orbit_speed_deg,
             widgets::config_field(defaults.orbit_speed_deg, 0.005).range(0.0..=5.0),
         );
+        changed |= widgets::labelled_drag(
+            ui,
+            "arrow scale (m per unit)",
+            "how long a body's motion arrows draw: 1 m/s, 1 kg m/s or 1 N is this many metres",
+            &mut camera.arrow_scale,
+            widgets::config_field(defaults.arrow_scale, 0.005).range(0.0..=10.0),
+        );
     });
     if ui.button("Reset to defaults").clicked() {
         *camera = CameraSettings::default();

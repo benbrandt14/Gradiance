@@ -163,6 +163,34 @@ pub struct Appearance {
     /// Emissive strength: 0 = matte, higher values glow in `fill`'s hue.
     #[serde(default)]
     pub emissive: f32,
+    /// Which motion arrows the body shows while it plays (brief S-2b).
+    #[serde(default, skip_serializing_if = "BodyArrows::is_none")]
+    pub arrows: BodyArrows,
+}
+
+/// The per-body motion arrows (brief S-2b): drawn from the body's centre of
+/// mass while the sim plays.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, bevy::reflect::Reflect,
+)]
+pub struct BodyArrows {
+    /// Its velocity.
+    #[serde(default)]
+    pub velocity: bool,
+    /// Its linear momentum (`m·v`).
+    #[serde(default)]
+    pub momentum: bool,
+    /// The net force on it (`m·a` over the last step).
+    #[serde(default)]
+    pub force: bool,
+}
+
+impl BodyArrows {
+    /// Whether no arrow is on (the saved default, left out of files).
+    #[must_use]
+    pub const fn is_none(&self) -> bool {
+        !(self.velocity || self.momentum || self.force)
+    }
 }
 
 fn default_border() -> Rgba {
@@ -271,6 +299,7 @@ impl Default for Appearance {
             fill: crate::theme::STUDIO.neutral,
             border: default_border(),
             emissive: 0.0,
+            arrows: BodyArrows::default(),
         }
     }
 }
