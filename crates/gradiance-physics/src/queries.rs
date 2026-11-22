@@ -52,6 +52,13 @@ pub struct PhysicsQueries<'w, 's> {
     >,
     masses: Query<'w, 's, &'static ComputedMass>,
     inertias: Query<'w, 's, &'static ComputedAngularInertia>,
+    /// Densities and gravity scales, for the area and potential-energy
+    /// reads (brief S-2).
+    densities: Query<'w, 's, (&'static ColliderDensity, Option<&'static GravityScale>)>,
+    /// The engine's gravity (m/s²).
+    gravity: Option<Res<'w, Gravity>>,
+    /// Each body's acceleration over the last step (brief S-2).
+    accelerations: Query<'w, 's, &'static crate::acceleration::BodyAcceleration>,
     sleeping: Query<'w, 's, Has<Sleeping>>,
     contacts: Res<'w, ContactGraph>,
     /// Authored joint definitions — read for the joint sensor reads; body
@@ -361,6 +368,26 @@ impl BodyRead for LiveBody<'_, '_, '_> {
 
     fn contact_count(&self) -> Option<usize> {
         Some(self.physics.touching_count(self.entity))
+    }
+
+    fn area(&self) -> Option<f32> {
+        let (density, _) = self.physics.densities.get(self.entity).ok()?;
+        let mass = self.physics.mass_of(self.entity)?.value();
+        (density.0 > 0.0).then(|| mass / density.0)
+    }
+
+    fn gravity(&self) -> Option<Vec2> {
+        let (_, scale) = self.physics.densities.get(self.entity).ok()?;
+        let gravity = self.physics.gravity.as_ref()?.0;
+        Some(gravity * scale.map_or(1.0, |s| s.0))
+    }
+
+    fn acceleration(&self) -> Option<Vec2> {
+        self.physics
+            .accelerations
+            .get(self.entity)
+            .ok()
+            .map(|a| a.value)
     }
 }
 

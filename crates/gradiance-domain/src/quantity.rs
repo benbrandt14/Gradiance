@@ -46,6 +46,19 @@ pub trait BodyRead {
     fn contact_force(&self) -> Option<Force2>;
     /// How many bodies it is touching.
     fn contact_count(&self) -> Option<usize>;
+    /// The area of its shape (m²; mass over density). Brief S-2.
+    fn area(&self) -> Option<f32> {
+        None
+    }
+    /// The gravity acting on it (m/s²; the scene's, times its gravity
+    /// scale). Brief S-2.
+    fn gravity(&self) -> Option<Vec2> {
+        None
+    }
+    /// Its acceleration over the last physics step (m/s²). Brief S-2.
+    fn acceleration(&self) -> Option<Vec2> {
+        None
+    }
 }
 
 /// What a [`PhysicalQuantity`] reads off a joint.
@@ -164,6 +177,13 @@ pub fn kinetic_energy(
     Energy(translational + rotational)
 }
 
+/// Gravitational potential energy `−m·(g·p)` of a body of mass `m` at
+/// world position `p` under the gravity `g`, zero at the world origin (so a
+/// body `h` above the origin under straight-down gravity `g` has `m·|g|·h`).
+pub fn potential_energy(mass: Mass, gravity: Vec2, position: Vec2) -> Energy {
+    Energy(-mass.value() * gravity.dot(position))
+}
+
 /// Linear momentum magnitude `m·|v|`.
 pub fn momentum(mass: Mass, velocity: Velocity2) -> Momentum {
     Momentum(mass.value() * velocity.value().length())
@@ -219,6 +239,22 @@ fn spin_momentum(b: &dyn BodyRead) -> Option<f32> {
 
 fn mass(b: &dyn BodyRead) -> Option<f32> {
     b.mass().map(Mass::value)
+}
+
+fn area(b: &dyn BodyRead) -> Option<f32> {
+    b.area()
+}
+
+fn inertia(b: &dyn BodyRead) -> Option<f32> {
+    b.angular_inertia()
+}
+
+fn potential(b: &dyn BodyRead) -> Option<f32> {
+    Some(potential_energy(b.mass()?, b.gravity()?, b.position()?).value())
+}
+
+fn accel(b: &dyn BodyRead) -> Option<f32> {
+    b.acceleration().map(Vec2::length)
 }
 
 fn distance(a: &dyn BodyRead, b: &dyn BodyRead) -> Option<f32> {
@@ -311,6 +347,34 @@ pub const QUANTITIES: &[PhysicalQuantity] = &[
         reader: Reader::Body(mass),
     },
     PhysicalQuantity {
+        name: "area",
+        label: "area",
+        dimension: Dimension::Area,
+        doc: "Area of a body's shape (mass over density).",
+        reader: Reader::Body(area),
+    },
+    PhysicalQuantity {
+        name: "inertia",
+        label: "inertia",
+        dimension: Dimension::MomentOfInertia,
+        doc: "Moment of inertia of a body about its centre of mass.",
+        reader: Reader::Body(inertia),
+    },
+    PhysicalQuantity {
+        name: "potential-energy",
+        label: "potential",
+        dimension: Dimension::Energy,
+        doc: "Gravitational potential energy of a body, m g h against the scene gravity, zero at the world origin.",
+        reader: Reader::Body(potential),
+    },
+    PhysicalQuantity {
+        name: "acceleration",
+        label: "accel",
+        dimension: Dimension::Acceleration,
+        doc: "Magnitude of a body's acceleration over the last physics step.",
+        reader: Reader::Body(accel),
+    },
+    PhysicalQuantity {
         name: "distance",
         label: "distance",
         dimension: Dimension::Length,
@@ -377,6 +441,12 @@ pub struct BodySample {
     pub contact_force: Option<Force2>,
     /// [`BodyRead::contact_count`].
     pub contact_count: Option<usize>,
+    /// [`BodyRead::area`].
+    pub area: Option<f32>,
+    /// [`BodyRead::gravity`].
+    pub gravity: Option<Vec2>,
+    /// [`BodyRead::acceleration`].
+    pub acceleration: Option<Vec2>,
 }
 
 impl BodySample {
@@ -389,6 +459,9 @@ impl BodySample {
             angular_inertia: body.angular_inertia(),
             contact_force: body.contact_force(),
             contact_count: body.contact_count(),
+            area: body.area(),
+            gravity: body.gravity(),
+            acceleration: body.acceleration(),
         }
     }
 }
@@ -411,6 +484,15 @@ impl BodyRead for BodySample {
     }
     fn contact_count(&self) -> Option<usize> {
         self.contact_count
+    }
+    fn area(&self) -> Option<f32> {
+        self.area
+    }
+    fn gravity(&self) -> Option<Vec2> {
+        self.gravity
+    }
+    fn acceleration(&self) -> Option<Vec2> {
+        self.acceleration
     }
 }
 
@@ -466,7 +548,17 @@ mod tests {
             angular_inertia: Some(0.5),
             contact_force: Some(Force2::new(Vec2::new(0.0, 19.6))),
             contact_count: Some(2),
+            area: Some(1.5),
+            gravity: Some(Vec2::new(0.0, -9.8)),
+            acceleration: Some(Vec2::new(3.0, 4.0)),
         }
+    }
+
+    /// The brief's case: a 2 kg box 3 m up under 9.8 m/s² holds 58.8 J.
+    #[test]
+    fn potential_energy_is_m_g_h() {
+        let e = potential_energy(Mass(2.0), Vec2::new(0.0, -9.8), Vec2::new(7.0, 3.0));
+        assert!((e.value() - 58.8).abs() < 1e-4, "{e:?}");
     }
 
     fn known_joint() -> JointSample {
@@ -494,6 +586,11 @@ mod tests {
         ("momentum", 10.0),
         ("angular-momentum", -1.0),
         ("mass", 2.0),
+        ("area", 1.5),
+        ("inertia", 0.5),
+        // −2·((0, −9.8)·(3, 4))
+        ("potential-energy", 78.4),
+        ("acceleration", 5.0),
         ("distance", 5.0),
         ("joint-length", 0.75),
         ("joint-angle", 0.25),

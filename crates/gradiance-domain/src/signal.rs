@@ -43,6 +43,16 @@ pub enum SignalSource {
     Momentum(StableId),
     /// Angular momentum of a body (I·ω, signed CCW-positive, kg·m²/s).
     AngularMomentum(StableId),
+    /// Area of a body's shape (m², brief S-2).
+    Area(StableId),
+    /// A body's moment of inertia (kg·m², brief S-2).
+    Inertia(StableId),
+    /// A body's gravitational potential energy (J, zero at the world
+    /// origin; brief S-2).
+    PotentialEnergy(StableId),
+    /// The magnitude of a body's acceleration over the last step (m/s²,
+    /// brief S-2).
+    Acceleration(StableId),
     /// Distance between a **joint's** two world anchors (m) — keyed by the
     /// joint's [`StableId`], read via `JointDef::sensor_state`.
     JointLength(StableId),
@@ -373,6 +383,10 @@ impl SignalSource {
             Self::KineticEnergy(id) => ("energy", id),
             Self::Momentum(id) => ("momentum", id),
             Self::AngularMomentum(id) => ("angmom", id),
+            Self::Area(id) => ("area", id),
+            Self::Inertia(id) => ("inertia", id),
+            Self::PotentialEnergy(id) => ("potential", id),
+            Self::Acceleration(id) => ("accel", id),
             Self::JointLength(id) => ("jlength", id),
             Self::JointAngle(id) => ("jangle", id),
             Self::JointForce(id) => ("jforce", id),
@@ -397,6 +411,10 @@ impl SignalSource {
             Self::KineticEnergy(_) => "kinetic-energy",
             Self::Momentum(_) => "momentum",
             Self::AngularMomentum(_) => "angular-momentum",
+            Self::Area(_) => "area",
+            Self::Inertia(_) => "inertia",
+            Self::PotentialEnergy(_) => "potential-energy",
+            Self::Acceleration(_) => "acceleration",
             Self::JointLength(_) => "joint-length",
             Self::JointAngle(_) => "joint-angle",
             Self::JointForce(_) => "joint-force",
@@ -422,6 +440,10 @@ impl SignalSource {
             | Self::KineticEnergy(id)
             | Self::Momentum(id)
             | Self::AngularMomentum(id)
+            | Self::Area(id)
+            | Self::Inertia(id)
+            | Self::PotentialEnergy(id)
+            | Self::Acceleration(id)
             | Self::JointLength(id)
             | Self::JointAngle(id)
             | Self::JointForce(id) => Subjects::One(*id),
@@ -450,6 +472,10 @@ impl SignalSource {
             ("kinetic-energy", Subjects::One(id)) => Self::KineticEnergy(id),
             ("momentum", Subjects::One(id)) => Self::Momentum(id),
             ("angular-momentum", Subjects::One(id)) => Self::AngularMomentum(id),
+            ("area", Subjects::One(id)) => Self::Area(id),
+            ("inertia", Subjects::One(id)) => Self::Inertia(id),
+            ("potential-energy", Subjects::One(id)) => Self::PotentialEnergy(id),
+            ("acceleration", Subjects::One(id)) => Self::Acceleration(id),
             ("joint-length", Subjects::One(id)) => Self::JointLength(id),
             ("joint-angle", Subjects::One(id)) => Self::JointAngle(id),
             ("joint-force", Subjects::One(id)) => Self::JointForce(id),
@@ -491,6 +517,10 @@ impl SignalSource {
             "energy" => Self::KineticEnergy(sid),
             "momentum" => Self::Momentum(sid),
             "angmom" => Self::AngularMomentum(sid),
+            "area" => Self::Area(sid),
+            "inertia" => Self::Inertia(sid),
+            "potential" => Self::PotentialEnergy(sid),
+            "accel" => Self::Acceleration(sid),
             "jlength" => Self::JointLength(sid),
             "jangle" => Self::JointAngle(sid),
             "jforce" => Self::JointForce(sid),
@@ -512,6 +542,10 @@ impl SignalSource {
             Self::KineticEnergy(a) => (Self::KineticEnergy(one(*a).0), one(*a).1),
             Self::Momentum(a) => (Self::Momentum(one(*a).0), one(*a).1),
             Self::AngularMomentum(a) => (Self::AngularMomentum(one(*a).0), one(*a).1),
+            Self::Area(a) => (Self::Area(one(*a).0), one(*a).1),
+            Self::Inertia(a) => (Self::Inertia(one(*a).0), one(*a).1),
+            Self::PotentialEnergy(a) => (Self::PotentialEnergy(one(*a).0), one(*a).1),
+            Self::Acceleration(a) => (Self::Acceleration(one(*a).0), one(*a).1),
             Self::JointLength(a) => (Self::JointLength(one(*a).0), one(*a).1),
             Self::JointAngle(a) => (Self::JointAngle(one(*a).0), one(*a).1),
             Self::JointForce(a) => (Self::JointForce(one(*a).0), one(*a).1),

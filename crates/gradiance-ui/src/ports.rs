@@ -249,7 +249,11 @@ mod tests {
                 "contact-count",
                 "kinetic-energy",
                 "momentum",
-                "angular-momentum"
+                "angular-momentum",
+                "area",
+                "inertia",
+                "potential-energy",
+                "acceleration"
             ]
         );
     }

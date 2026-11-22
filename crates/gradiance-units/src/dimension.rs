@@ -48,13 +48,15 @@ pub enum Dimension {
     Momentum,
     /// Angular momentum (`kg·m²/s`).
     AngularMomentum,
+    /// Moment of inertia (`kg·m²`; brief S-2).
+    MomentOfInertia,
     /// A pure ratio or count — no unit.
     Dimensionless,
 }
 
 impl Dimension {
     /// Every dimension, in declaration order.
-    pub const ALL: [Self; 18] = [
+    pub const ALL: [Self; 19] = [
         Self::Time,
         Self::Length,
         Self::Area,
@@ -72,6 +74,7 @@ impl Dimension {
         Self::Energy,
         Self::Momentum,
         Self::AngularMomentum,
+        Self::MomentOfInertia,
         Self::Dimensionless,
     ];
 
@@ -96,6 +99,7 @@ impl Dimension {
             Self::Frequency => Dims::new(0, 0, -1, 0),
             Self::Momentum => Dims::new(1, 1, -1, 0),
             Self::AngularMomentum => Dims::new(2, 1, -1, 0),
+            Self::MomentOfInertia => Dims::new(2, 1, 0, 0),
             Self::Dimensionless => Dims::NONE,
         }
     }
@@ -158,6 +162,7 @@ impl Dimension {
             Self::Energy => "J",
             Self::Momentum => "kg·m/s",
             Self::AngularMomentum => "kg·m²/s",
+            Self::MomentOfInertia => "kg·m²",
             Self::Dimensionless => "",
         }
     }
