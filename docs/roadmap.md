@@ -769,7 +769,8 @@ Each gap below reuses an existing seam; one brief each, in this order:
 3. **S-3** laser refraction (refractive index, Snell, total internal
    reflection) and beam colour — done.
 4. ~~S-4 material presets~~ — rejected by the owner (2026-11-21).
-5. **S-5** gear outline + gear tool (meshing by contact, no constraint).
+5. **S-5** gear outline + gear tool (meshing by contact, no constraint) —
+   done.
 6. **S-6** context quick actions: loosen, centre pin, centre thruster,
    to circle, motor brake.
 7. **S-7** contact hit pulse signal, removal on contact, time to live

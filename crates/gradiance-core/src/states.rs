@@ -33,6 +33,9 @@ pub enum ToolState {
     Circle,
     /// Click out arbitrary polygons.
     Polygon,
+    /// Draw spur gears (brief S-5): press at the centre, drag out the pitch
+    /// radius; every drawn gear has one tooth size, so any two mesh.
+    Gear,
     /// Draw freehand (brief N-6): the dragged stroke becomes one body, its
     /// segments joined as one union, or a filled polygon when it closes.
     Sketch,

@@ -5046,5 +5046,59 @@ Settings are global, so flip between the options rather than viewing them side b
             ),
             ingested_as: "crates/gradiance-ui/src/adjust_panel.rs short()",
         ),
+        (
+            question: (
+                id: "gear-teeth-generated",
+                title: "How are gear teeth shaped?",
+                source: "Brief S-5",
+                description: r#"The brief allowed trapezoid or simplified involute teeth. Trapezoid teeth jammed a 12:24 pair in the behaviour test."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Rack-generated teeth",
+                        caption: r#"The basic rack rolls along the pitch circle and cuts the gaps: conjugate teeth with undercut, 20 samples a tooth, 6 to 48 teeth, backlash from a 0.44 tooth fraction."#,
+                    ),
+                    (
+                        label: "Trapezoid teeth",
+                        caption: r#"Four vertices a tooth; measured to jam after one tooth."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "gear-teeth-generated",
+                title: "How are gear teeth shaped?",
+                choice: Picked("Rack-generated teeth"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "crates/gradiance-geometry/src/gear.rs",
+        ),
+        (
+            question: (
+                id: "polygon-collider-exact",
+                title: "Which collider does a polygon leaf get?",
+                source: "Brief S-5 (gear jam)",
+                description: r#"avian's convex_decomposition is approximate: it made a 24-tooth gear two hulls and filled every tooth gap. The question covers every polygon leaf, not only gears."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Exact convex partition",
+                        caption: r#"Triangulate and merge to convex pieces (Hertel-Mehlhorn); every notch collides as drawn. More pieces (a 24-tooth gear: 96). The approximate decomposition stays as the fallback and for CSG contours."#,
+                    ),
+                    (
+                        label: "Approximate for all but gears",
+                        caption: r#"Keep the old collider for other polygons; needs a gear marker on the shape, and notches elsewhere keep filling."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "polygon-collider-exact",
+                title: "Which collider does a polygon leaf get?",
+                choice: Picked("Exact convex partition"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "crates/gradiance-geometry/src/partition.rs; crates/gradiance-physics/src/body_sync.rs partition_collider",
+        ),
     ],
 )

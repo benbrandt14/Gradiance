@@ -595,6 +595,20 @@ pub fn context_menu(
                         .write_batch(key_invocations(EditorAction::Ungroup));
                     close = true;
                 }
+                // Brief S-5: a circle becomes a gear of the same pitch
+                // radius; the operation skips any body that is not a circle.
+                if row_enabled(
+                    ui,
+                    "Make gear",
+                    "turn each selected circle into a toothed gear that meshes with other made gears",
+                    !selected_ids.is_empty(),
+                ) {
+                    writers.invoke.write(InvokeOp::with(
+                        "body.make_gear",
+                        json!({"i": "selection"}),
+                    ));
+                    close = true;
+                }
                 if row_enabled(ui, "Merge into one body", "", selected_ids.len() >= 2) {
                     writers.invoke.write(InvokeOp::with(
                         "body.merge",

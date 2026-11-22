@@ -215,6 +215,14 @@ pub enum ToolCommit {
         /// Stroke width (metres).
         width: f32,
     },
+    /// Draw a spur gear (the gear tool, brief S-5): invokes the
+    /// `body.spawn_gear` operation, one undo step.
+    Gear {
+        /// Centre, world space.
+        center: Vec2,
+        /// Pitch radius (metres).
+        radius: f32,
+    },
     /// A script tool's gesture completed: run its body once with these
     /// points (the script tool). Not an authoring intent itself — the script
     /// run emits intents through the ordinary verbs.
@@ -472,6 +480,10 @@ impl ToolCommitWriters<'_> {
                 // change the width afterwards.
                 self.invoke
                     .write(crate::tools::sketch_tool::sketch_invocation(&path, width));
+            }
+            ToolCommit::Gear { center, radius } => {
+                self.invoke
+                    .write(crate::tools::gear_tool::gear_invocation(center, radius));
             }
             ToolCommit::Script { tool, points } => {
                 self.script_tools

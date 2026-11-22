@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 156 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 159 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -28,6 +28,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `body.index_at` | `(body-index-at x y)` | query | — | — | Index of a body whose shape contains (x, y) (first in id order); -1 if none. | `{"x": 0, "y": 1}` |
 | `body.intersect` | `(intersect a b)` | edit | `intersect` | Context/Intersect | Keep only where bodies a and b overlap (CSG intersect) on a; b is consumed. | `{"a": 0, "b": 1}` |
 | `body.is_static` | `(body-static? i)` | query | — | — | Whether the i-th body is static (1) or not (0). | `{"i": 0}` |
+| `body.make_gear` | `(make-gear i [teeth])` | edit | `property-edit` | Context/Make gear | Turn the i-th body, a circle, into a spur gear of the same pitch radius (teeth absent: one tooth size for every made gear, so they mesh) — undoable. | `{"i": 0, "teeth": 12}` |
 | `body.merge` | `(merge a b)` | edit | `merge` | Context/Merge into one body | Fuse bodies a and b into one CSG union; a survives. | `{"a": 0, "b": 1}` |
 | `body.mirror_h` | `(mirror-h targets)` | edit | `mirror` | Edit/Mirror horizontally | Mirror the listed bodies left to right across the vertical line through their centre, with their joints and nodes — one undo step. | `{"targets": [0, 1]}` |
 | `body.mirror_v` | `(mirror-v targets)` | edit | `mirror` | Edit/Mirror vertically | Mirror the listed bodies top to bottom across the horizontal line through their centre, with their joints and nodes — one undo step. | `{"targets": [0, 1]}` |
@@ -51,6 +52,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `body.spawn_box` | `(spawn-box x y w h)` | edit | `spawn-body` | — | Author a box body of size w×h centred at (x, y), in metres; returns its handle. | `{"x": 0.5, "y": 2, "w": 1.6, "h": 1.2}` |
 | `body.spawn_box_rot` | `(spawn-box-rot x y w h angle)` | edit | `spawn-body` | — | Author a w×h box centred at (x, y), in metres, rotated by angle radians; returns its handle. | `{"x": 2, "y": 3, "w": 1, "h": 0.5, "angle": 0.3}` |
 | `body.spawn_circle` | `(spawn-circle x y r)` | edit | `spawn-body` | — | Author a circle body of radius r centred at (x, y), in metres; returns its handle. | `{"x": 0, "y": 3, "r": 0.5}` |
+| `body.spawn_gear` | `(spawn-gear x y r teeth)` | edit | `spawn-body` | — | Author a spur gear of pitch radius r (metres) and 6 to 64 teeth centred at (x, y); gears of equal r/teeth mesh by contact. Returns its handle. | `{"x": 0, "y": 2, "r": 0.6, "teeth": 12}` |
 | `body.spawn_ground` | `(spawn-ground x y angle)` | edit | `spawn-body` | — | Author a fixed ground half-plane through (x, y) (metres), tilted by angle radians. | `{"x": 0, "y": -2, "angle": 0.1}` |
 | `body.subtract` | `(subtract a b)` | edit | `subtract` | Context/Subtract from first selected | Cut body b's shape out of body a (CSG subtract); b is consumed, a split result becomes pieces. | `{"a": 0, "b": 1}` |
 | `body.touch_count` | `(touch-count i)` | query | — | — | How many bodies the i-th body is currently touching; NaN if out of range. | `{"i": 0}` |
@@ -238,6 +240,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `tool.circle` | `(circle-tool)` | editor | — | Tools/Circle, C | Use the circle tool: press at the centre, drag out the radius. | `{}` |
 | `tool.cut` | `(cut-tool)` | editor | — | Tools/Cut, K | Use the cut tool: drag a stroke across the bodies to cut. | `{}` |
 | `tool.drag` | `(drag-tool)` | editor | — | Tools/Drag, D | Use the drag tool: pull bodies with a mouse spring while playing, move them while paused. | `{}` |
+| `tool.gear` | `(gear-tool)` | editor | — | Tools/Gear | Use the gear tool: press at the centre, drag out the pitch radius; drawn gears mesh. | `{}` |
 | `tool.ground` | `(ground-tool)` | editor | — | Tools/Ground, G | Use the ground tool: click to place a ground plane, drag to tilt it. | `{}` |
 | `tool.hinge` | `(hinge-tool)` | editor | — | Tools/Hinge, H | Use the hinge tool: click where two bodies overlap to hinge them, or on one body to pin it. | `{}` |
 | `tool.laser` | `(laser-tool)` | editor | — | Tools/Laser | Use the laser tool: press where the laser sits, drag to aim; release over a body to make it the target. | `{}` |
