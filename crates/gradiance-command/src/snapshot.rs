@@ -58,6 +58,8 @@ pub struct BodySnapshot {
     /// The refractive index, if any: the old half of a `set-index` edit
     /// (brief S-3).
     pub optics: Option<gradiance_domain::optics::Optics>,
+    /// Removal during a run (brief S-7).
+    pub lifetime: Option<gradiance_domain::lifetime::Lifetime>,
 }
 
 impl BodySnapshot {
@@ -211,6 +213,9 @@ pub fn snapshot_scene(world: &mut World) -> SceneSnapshot {
                     .get::<gradiance_domain::motion::InitialMotion>()
                     .copied(),
                 optics: entity.get::<gradiance_domain::optics::Optics>().copied(),
+                lifetime: entity
+                    .get::<gradiance_domain::lifetime::Lifetime>()
+                    .copied(),
             }
         })
         .collect();

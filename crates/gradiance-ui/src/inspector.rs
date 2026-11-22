@@ -61,6 +61,7 @@ pub struct BodyProps<'w, 's> {
     fluid_q: Query<'w, 's, &'static gradiance_domain::fluid::Fluid, With<Body>>,
     motion_q: Query<'w, 's, &'static gradiance_domain::motion::InitialMotion, With<Body>>,
     optics_q: Query<'w, 's, &'static gradiance_domain::optics::Optics, With<Body>>,
+    lifetime_q: Query<'w, 's, &'static gradiance_domain::lifetime::Lifetime, With<Body>>,
     friction_q: Query<'w, 's, &'static Friction, With<Body>>,
     restitution_q: Query<'w, 's, &'static Restitution, With<Body>>,
     density_q: Query<'w, 's, &'static ColliderDensity, With<Body>>,
@@ -342,6 +343,93 @@ pub fn physics_section(ui: &mut egui::Ui, selection: &Selection, props: &mut Bod
     optics_block(ui, selection, props, primary);
     tracer_block(ui, selection, props, primary);
     motion_block(ui, selection, props, primary);
+    lifetime_block(ui, selection, props, primary);
+}
+
+/// The lifetime editor (brief S-7): remove what this body touches, and
+/// remove this body after a time. Removal lasts for the run; undoing the run
+/// brings the bodies back. One undo step per gesture.
+fn lifetime_block(
+    ui: &mut egui::Ui,
+    selection: &Selection,
+    props: &mut BodyProps,
+    primary: Entity,
+) {
+    use gradiance_domain::lifetime::Lifetime;
+    use gradiance_units::Time;
+    let current = props
+        .lifetime_q
+        .get(primary)
+        .ok()
+        .copied()
+        .unwrap_or_default();
+    let mut contact = current.remove_on_contact;
+    if ui
+        .checkbox(&mut contact, "remove what it touches")
+        .on_hover_text("while it plays, every body this one hits is removed")
+        .changed()
+    {
+        commit_lifetime(selection, props, move |l| Lifetime {
+            remove_on_contact: contact,
+            ..l
+        });
+    }
+    let mut timed = current.ttl.is_some();
+    ui.horizontal(|ui| {
+        if ui
+            .checkbox(&mut timed, "remove after")
+            .on_hover_text("while it plays, this body is removed after this simulated time")
+            .changed()
+        {
+            commit_lifetime(selection, props, move |l| Lifetime {
+                ttl: timed.then_some(l.ttl.unwrap_or(Time(1.0))),
+                ..l
+            });
+        }
+        let Some(ttl) = current.ttl else {
+            return;
+        };
+        let mut seconds = ttl.0;
+        if let Commit::Done(_, new) = precise_drag_clamped(
+            ui,
+            ui.id().with("lifetime-ttl"),
+            &mut seconds,
+            1.0,
+            0.01,
+            0.01..=3600.0,
+            Dimension::Time,
+        ) {
+            commit_lifetime(selection, props, move |l| Lifetime {
+                ttl: Some(Time(new)),
+                ..l
+            });
+        }
+    });
+}
+
+/// Commits one batched lifetime edit across the selection: each target's
+/// new lifetime is `make_new` of its own; an empty lifetime is stored as none.
+fn commit_lifetime(
+    selection: &Selection,
+    props: &mut BodyProps,
+    make_new: impl Fn(gradiance_domain::lifetime::Lifetime) -> gradiance_domain::lifetime::Lifetime,
+) {
+    let changes: Vec<PropertyChange> = selection
+        .iter()
+        .filter_map(|e| {
+            let id = props.ids.get(e).ok().copied()?;
+            let old = props.lifetime_q.get(e).ok().copied();
+            let new = make_new(old.unwrap_or_default()).sanitized();
+            (old != new).then_some(PropertyChange {
+                id,
+                old: PropertyValue::Lifetime(old),
+                new: PropertyValue::Lifetime(new),
+            })
+        })
+        .collect();
+    if !changes.is_empty() {
+        props.edits.write(PropertyEditIntent { changes });
+    }
 }
 
 /// The optics editor (brief S-3): a toggle that lets laser beams through

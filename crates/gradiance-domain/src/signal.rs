@@ -53,6 +53,9 @@ pub enum SignalSource {
     /// The magnitude of a body's acceleration over the last step (m/s²,
     /// brief S-2).
     Acceleration(StableId),
+    /// 1 on the physics step a body starts touching another, else 0
+    /// (brief S-7).
+    HitPulse(StableId),
     /// Distance between a **joint's** two world anchors (m) — keyed by the
     /// joint's [`StableId`], read via `JointDef::sensor_state`.
     JointLength(StableId),
@@ -387,6 +390,7 @@ impl SignalSource {
             Self::Inertia(id) => ("inertia", id),
             Self::PotentialEnergy(id) => ("potential", id),
             Self::Acceleration(id) => ("accel", id),
+            Self::HitPulse(id) => ("hit", id),
             Self::JointLength(id) => ("jlength", id),
             Self::JointAngle(id) => ("jangle", id),
             Self::JointForce(id) => ("jforce", id),
@@ -415,6 +419,7 @@ impl SignalSource {
             Self::Inertia(_) => "inertia",
             Self::PotentialEnergy(_) => "potential-energy",
             Self::Acceleration(_) => "acceleration",
+            Self::HitPulse(_) => "hit",
             Self::JointLength(_) => "joint-length",
             Self::JointAngle(_) => "joint-angle",
             Self::JointForce(_) => "joint-force",
@@ -444,6 +449,7 @@ impl SignalSource {
             | Self::Inertia(id)
             | Self::PotentialEnergy(id)
             | Self::Acceleration(id)
+            | Self::HitPulse(id)
             | Self::JointLength(id)
             | Self::JointAngle(id)
             | Self::JointForce(id) => Subjects::One(*id),
@@ -476,6 +482,7 @@ impl SignalSource {
             ("inertia", Subjects::One(id)) => Self::Inertia(id),
             ("potential-energy", Subjects::One(id)) => Self::PotentialEnergy(id),
             ("acceleration", Subjects::One(id)) => Self::Acceleration(id),
+            ("hit", Subjects::One(id)) => Self::HitPulse(id),
             ("joint-length", Subjects::One(id)) => Self::JointLength(id),
             ("joint-angle", Subjects::One(id)) => Self::JointAngle(id),
             ("joint-force", Subjects::One(id)) => Self::JointForce(id),
@@ -521,6 +528,7 @@ impl SignalSource {
             "inertia" => Self::Inertia(sid),
             "potential" => Self::PotentialEnergy(sid),
             "accel" => Self::Acceleration(sid),
+            "hit" => Self::HitPulse(sid),
             "jlength" => Self::JointLength(sid),
             "jangle" => Self::JointAngle(sid),
             "jforce" => Self::JointForce(sid),
@@ -546,6 +554,7 @@ impl SignalSource {
             Self::Inertia(a) => (Self::Inertia(one(*a).0), one(*a).1),
             Self::PotentialEnergy(a) => (Self::PotentialEnergy(one(*a).0), one(*a).1),
             Self::Acceleration(a) => (Self::Acceleration(one(*a).0), one(*a).1),
+            Self::HitPulse(a) => (Self::HitPulse(one(*a).0), one(*a).1),
             Self::JointLength(a) => (Self::JointLength(one(*a).0), one(*a).1),
             Self::JointAngle(a) => (Self::JointAngle(one(*a).0), one(*a).1),
             Self::JointForce(a) => (Self::JointForce(one(*a).0), one(*a).1),

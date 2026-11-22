@@ -18,7 +18,7 @@ use gradiance_domain::fluid::Fluid;
 use gradiance_domain::motion::InitialMotion;
 use gradiance_domain::props::BodyPhysics;
 use gradiance_op::{OpContext, OpError, OpMeta, OpOutput, OpRegistry, Operation, Seam, Target};
-use gradiance_units::{Angle, Length};
+use gradiance_units::{Angle, Length, Time};
 use serde::Deserialize;
 
 /// Registers this file's operations.
@@ -38,6 +38,7 @@ pub(super) fn register(registry: &mut OpRegistry) {
     registry.register::<SetSpin>();
     registry.register::<SetArrows>();
     registry.register::<SetIndex>();
+    registry.register::<SetLifetime>();
 }
 
 /// Move the body `i` to (`x`, `y`) and rotate it to `angle`: one undo step.
@@ -727,6 +728,56 @@ impl Operation for SetIndex {
                 id: body.id,
                 old: PropertyValue::Optics(body.optics),
                 new: PropertyValue::Optics(new),
+            })
+            .collect();
+        if changes.is_empty() {
+            return Ok(OpOutput::none());
+        }
+        Ok(OpOutput::none().message(PropertyEditIntent { changes }))
+    }
+}
+
+/// Mark a body to remove what it touches, or itself after a time, during a
+/// run (brief S-7). Removal lasts for the run; undoing the run brings the
+/// bodies back.
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct SetLifetime {
+    /// The body.
+    pub i: Target,
+    /// Non-zero: remove every other body this one starts touching.
+    pub contact: f64,
+    /// Remove this body after this time; 0 or less: never.
+    pub ttl: Time,
+}
+
+impl Operation for SetLifetime {
+    const META: OpMeta = OpMeta {
+        id: "body.set_lifetime",
+        lisp: "set-lifetime",
+        doc: "During a run, the i-th body removes every body it starts touching (contact non-zero) and removes itself after ttl seconds (0 or less: never). Removed bodies stop colliding and hide until the run is undone — undoable, saved.",
+        seam: Seam::Edit,
+        menu: None,
+        chord: None,
+        undo: Some(name::PROPERTY_EDIT),
+        example: r#"{"i": 0, "contact": 1, "ttl": 2}"#,
+    };
+
+    fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
+        let scene = ctx.get::<SceneSnapshot>()?;
+        let new = gradiance_domain::lifetime::Lifetime {
+            remove_on_contact: self.contact != 0.0,
+            ttl: Some(self.ttl),
+        }
+        .sanitized();
+        let changes: Vec<PropertyChange> = bodies_of(ctx, scene, &self.i)?
+            .into_iter()
+            .filter_map(|id| scene.get(id))
+            .filter(|body| body.lifetime != new)
+            .map(|body| PropertyChange {
+                id: body.id,
+                old: PropertyValue::Lifetime(body.lifetime),
+                new: PropertyValue::Lifetime(new),
             })
             .collect();
         if changes.is_empty() {

@@ -5100,5 +5100,32 @@ Settings are global, so flip between the options rather than viewing them side b
             ),
             ingested_as: "crates/gradiance-geometry/src/partition.rs; crates/gradiance-physics/src/body_sync.rs partition_collider",
         ),
+        (
+            question: (
+                id: "lifetime-removal-derived",
+                title: "How does a removed body leave the run?",
+                source: "S-7",
+                description: r#"Remove on contact and time to live must not despawn an authored entity outside a command."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Derived marker",
+                        caption: r#"A Removed marker disables the collider and the motion and hides the mesh; undo of the run clears it."#,
+                    ),
+                    (
+                        label: "Despawn by command",
+                        caption: r#"Each removal is a command; a run would flood the undo history and could not be undone as one step."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "lifetime-removal-derived",
+                title: "How does a removed body leave the run?",
+                choice: Picked("Derived marker"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "physics::lifetime",
+        ),
     ],
 )

@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 164 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 165 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -46,6 +46,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `body.set_fluid` | `(set-fluid i density [drag])` | edit | `property-edit` | — | Make the i-th body a fluid of density (kg/m2) and drag (1/s): bodies inside float or sink by their density and are damped; making a fluid also makes it a static sensor. Density 0 turns the fluid off — undoable. | `{"i": 0, "density": 2, "drag": 2}` |
 | `body.set_friction` | `(set-friction i v)` | edit | `property-edit` | — | Set the i-th body's Coulomb friction (static and dynamic) — undoable. | `{"i": 0, "v": 0.9}` |
 | `body.set_index` | `(set-index i n)` | edit | `property-edit` | — | Give the i-th body a refractive index n (1.33 water, 1.5 glass; held to 1..4): laser beams pass through it, bent by Snell's law, and reflect inside past the critical angle. n 0 or less makes it a mirror again — undoable, saved. | `{"i": 0, "n": 1.5}` |
+| `body.set_lifetime` | `(set-lifetime i contact ttl)` | edit | `property-edit` | — | During a run, the i-th body removes every body it starts touching (contact non-zero) and removes itself after ttl seconds (0 or less: never). Removed bodies stop colliding and hide until the run is undone — undoable, saved. | `{"i": 0, "contact": 1, "ttl": 2}` |
 | `body.set_restitution` | `(set-restitution i v)` | edit | `property-edit` | — | Set the i-th body's bounciness, 0 = dead, 1 = perfectly elastic — undoable. | `{"i": 0, "v": 0.8}` |
 | `body.set_spin` | `(set-spin i w)` | edit | `property-edit` | — | Set the spin (rad/s, counter-clockwise) the i-th body starts each run with. Applied when play starts from an edited layout, not on resume — undoable, saved. | `{"i": 0, "w": 2}` |
 | `body.set_static` | `(set-static i on)` | edit | `property-edit` | — | Make the i-th body static when `on` is non-zero, dynamic otherwise — undoable. | `{"i": 0, "on": 1}` |

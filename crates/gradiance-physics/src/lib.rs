@@ -21,6 +21,7 @@ pub mod hold;
 pub mod island_sync;
 pub mod joint_sync;
 pub mod laser;
+pub mod lifetime;
 pub mod motor;
 pub mod queries;
 pub mod thrust;
@@ -110,6 +111,7 @@ impl Plugin for GradiancePhysicsPlugin {
         app.init_resource::<SimStep>();
         app.add_systems(First, clear_stepped_flag);
         app.add_systems(PostStartup, seed_last_physics_tick);
+        lifetime::install(app);
         app.add_systems(FixedFirst, advance_owed_step);
         app.add_systems(
             Update,
