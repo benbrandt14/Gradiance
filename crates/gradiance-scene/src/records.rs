@@ -85,6 +85,9 @@ pub struct BodyRecord {
     /// Conveyor speed along the outline (brief S-8), if the surface moves.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub surface: Option<gradiance_domain::surface::SurfaceSpeed>,
+    /// An image on the front face (brief S-13).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub texture: Option<gradiance_domain::texture::BodyTexture>,
 }
 
 impl BodyRecord {
@@ -122,6 +125,9 @@ impl BodyRecord {
             surface: entity_ref
                 .get::<gradiance_domain::surface::SurfaceSpeed>()
                 .copied(),
+            texture: entity_ref
+                .get::<gradiance_domain::texture::BodyTexture>()
+                .cloned(),
         })
     }
 
@@ -162,6 +168,9 @@ impl BodyRecord {
         if let Some(surface) = self.surface {
             entity.insert(surface);
         }
+        if let Some(texture) = &self.texture {
+            entity.insert(texture.clone());
+        }
         entity.id()
     }
 
@@ -201,75 +210,34 @@ impl BodyRecord {
                 entity.insert(SelectionGroup(self.groups.clone()));
             }
         }
-        if self.field != prev.field {
-            match self.field {
-                Some(field) => {
-                    entity.insert(field);
-                }
-                None => {
-                    entity.remove::<gradiance_domain::field::FieldSource>();
-                }
-            }
+        // The optional components: present when set, removed when not.
+        restore_optional(&mut entity, self.field.as_ref(), prev.field.as_ref());
+        restore_optional(&mut entity, self.tracer.as_ref(), prev.tracer.as_ref());
+        restore_optional(&mut entity, self.fluid.as_ref(), prev.fluid.as_ref());
+        restore_optional(&mut entity, self.motion.as_ref(), prev.motion.as_ref());
+        restore_optional(&mut entity, self.optics.as_ref(), prev.optics.as_ref());
+        restore_optional(&mut entity, self.lifetime.as_ref(), prev.lifetime.as_ref());
+        restore_optional(&mut entity, self.surface.as_ref(), prev.surface.as_ref());
+        restore_optional(&mut entity, self.texture.as_ref(), prev.texture.as_ref());
+    }
+}
+
+/// Writes an optional component when it differs from `prev`: inserts it,
+/// or removes it when it is now `None`.
+fn restore_optional<C: Component + Clone + PartialEq>(
+    entity: &mut EntityWorldMut,
+    now: Option<&C>,
+    prev: Option<&C>,
+) {
+    if now == prev {
+        return;
+    }
+    match now {
+        Some(component) => {
+            entity.insert(component.clone());
         }
-        if self.tracer != prev.tracer {
-            match self.tracer {
-                Some(tracer) => {
-                    entity.insert(tracer);
-                }
-                None => {
-                    entity.remove::<gradiance_domain::tracer::Tracer>();
-                }
-            }
-        }
-        if self.fluid != prev.fluid {
-            match self.fluid {
-                Some(fluid) => {
-                    entity.insert(fluid);
-                }
-                None => {
-                    entity.remove::<gradiance_domain::fluid::Fluid>();
-                }
-            }
-        }
-        if self.motion != prev.motion {
-            match self.motion {
-                Some(motion) => {
-                    entity.insert(motion);
-                }
-                None => {
-                    entity.remove::<gradiance_domain::motion::InitialMotion>();
-                }
-            }
-        }
-        if self.optics != prev.optics {
-            match self.optics {
-                Some(optics) => {
-                    entity.insert(optics);
-                }
-                None => {
-                    entity.remove::<gradiance_domain::optics::Optics>();
-                }
-            }
-        }
-        if self.lifetime != prev.lifetime {
-            match self.lifetime {
-                Some(lifetime) => {
-                    entity.insert(lifetime);
-                }
-                None => {
-                    entity.remove::<gradiance_domain::lifetime::Lifetime>();
-                }
-            }
-        }
-        if self.surface != prev.surface {
-            match self.surface {
-                Some(surface) => {
-                    entity.insert(surface);
-                }
-                None => {
-                    entity.remove::<gradiance_domain::surface::SurfaceSpeed>();
-                }
-            }
+        None => {
+            entity.remove::<C>();
         }
     }
 }

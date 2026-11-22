@@ -24,6 +24,7 @@ pub mod quantity;
 pub mod ramp;
 pub mod settings;
 pub mod surface;
+pub mod texture;
 pub mod water;
 pub use gradiance_geometry::shape;
 pub mod signal;

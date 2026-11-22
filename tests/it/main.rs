@@ -72,6 +72,7 @@ mod signals;
 mod sketch;
 mod sleeping;
 mod sponge;
+mod texture;
 mod thrusters;
 mod tools;
 mod ui_conflicts;

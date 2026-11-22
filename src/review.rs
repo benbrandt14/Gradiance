@@ -527,6 +527,7 @@ mod tests {
             optics: None,
             lifetime: None,
             surface: None,
+            texture: None,
         }
     }
 

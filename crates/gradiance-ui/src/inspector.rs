@@ -63,6 +63,7 @@ pub struct BodyProps<'w, 's> {
     optics_q: Query<'w, 's, &'static gradiance_domain::optics::Optics, With<Body>>,
     lifetime_q: Query<'w, 's, &'static gradiance_domain::lifetime::Lifetime, With<Body>>,
     surface_q: Query<'w, 's, &'static gradiance_domain::surface::SurfaceSpeed, With<Body>>,
+    texture_q: Query<'w, 's, &'static gradiance_domain::texture::BodyTexture, With<Body>>,
     friction_q: Query<'w, 's, &'static Friction, With<Body>>,
     restitution_q: Query<'w, 's, &'static Restitution, With<Body>>,
     density_q: Query<'w, 's, &'static ColliderDensity, With<Body>>,
@@ -346,6 +347,103 @@ pub fn physics_section(ui: &mut egui::Ui, selection: &Selection, props: &mut Bod
     motion_block(ui, selection, props, primary);
     lifetime_block(ui, selection, props, primary);
     surface_row(ui, selection, props, primary);
+    texture_block(ui, selection, props, primary);
+}
+
+/// The image row (brief S-13): the file path (Enter applies it, by the
+/// rule of `body.set_texture`), raw or shaded by the look, and remove. The texture
+/// tool places it. One undo step per edit.
+fn texture_block(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProps, primary: Entity) {
+    use gradiance_domain::texture::{BodyTexture, TextureMode};
+    let current = props.texture_q.get(primary).ok().cloned();
+    ui.horizontal(|ui| {
+        ui.label("image")
+            .on_hover_text("a PNG on the front face, relative to the scene file's folder");
+        let key = ui.id().with(("image-path", primary));
+        let mut text: String = ui.data_mut(|d| d.get_temp(key)).unwrap_or_else(|| {
+            current
+                .as_ref()
+                .map_or_else(String::new, |t| t.path.clone())
+        });
+        let response = ui.add(egui::TextEdit::singleline(&mut text).desired_width(140.0));
+        if response.changed() {
+            ui.data_mut(|d| d.insert_temp(key, text.clone()));
+        }
+        if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+            ui.data_mut(|d| d.remove::<String>(key));
+            // The verb's rule: a new image covers the face.
+            let changes: Vec<PropertyChange> = selection
+                .iter()
+                .filter_map(|e| {
+                    let id = props.ids.get(e).ok().copied()?;
+                    let shape = props.shapes_q.get(e).ok()?;
+                    let old = props.texture_q.get(e).ok().cloned();
+                    let new =
+                        gradiance_command::ops::texture::with_path(old.as_ref(), shape, &text);
+                    (old != new).then_some(PropertyChange {
+                        id,
+                        old: PropertyValue::Texture(old),
+                        new: PropertyValue::Texture(new),
+                    })
+                })
+                .collect();
+            if !changes.is_empty() {
+                props.edits.write(PropertyEditIntent { changes });
+            }
+        }
+    });
+    let Some(current) = current else {
+        return;
+    };
+    let edit = |new: Option<BodyTexture>, props: &mut BodyProps| {
+        let changes: Vec<PropertyChange> = selection
+            .iter()
+            .filter_map(|e| {
+                let id = props.ids.get(e).ok().copied()?;
+                let old = props.texture_q.get(e).ok().cloned();
+                let new = match (&new, &old) {
+                    // A mode change keeps each body's own placement.
+                    (Some(n), Some(o)) => Some(BodyTexture {
+                        mode: n.mode,
+                        ..o.clone()
+                    }),
+                    _ => None,
+                };
+                (old != new).then_some(PropertyChange {
+                    id,
+                    old: PropertyValue::Texture(old),
+                    new: PropertyValue::Texture(new),
+                })
+            })
+            .collect();
+        if !changes.is_empty() {
+            props.edits.write(PropertyEditIntent { changes });
+        }
+    };
+    ui.horizontal(|ui| {
+        let mut raw = current.mode == TextureMode::Raw;
+        if ui
+            .checkbox(&mut raw, "raw")
+            .on_hover_text("show the image as it is, without the look's shading")
+            .changed()
+        {
+            let mode = if raw {
+                TextureMode::Raw
+            } else {
+                TextureMode::Toon
+            };
+            edit(
+                Some(BodyTexture {
+                    mode,
+                    ..current.clone()
+                }),
+                props,
+            );
+        }
+        if ui.button("remove image").clicked() {
+            edit(None, props);
+        }
+    });
 }
 
 /// The conveyor row (brief S-8): the surface speed along the outline, in

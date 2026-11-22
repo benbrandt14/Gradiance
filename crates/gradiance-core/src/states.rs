@@ -38,6 +38,9 @@ pub enum ToolState {
     Gear,
     /// Fill a dragged rectangle with particle water (brief S-11).
     Water,
+    /// Place a body's image (brief S-13): drag moves, Shift-drag scales,
+    /// right-drag turns.
+    Texture,
     /// Draw freehand (brief N-6): the dragged stroke becomes one body, its
     /// segments joined as one union, or a filled polygon when it closes.
     Sketch,

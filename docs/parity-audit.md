@@ -40,7 +40,7 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Tracer | present | `tool.tracer` (fade, size, pattern: `domain::tracer`) |
 | Laser pen | done | `tool.laser`, `laser` (N-8): reflection and hit signal; refraction and beam colour: **S-3** |
 | Gear | done | **S-5**: `tool.gear`, `spawn-gear` (rack-generated teeth, meshing by contact) |
-| Texture | missing | **S-13** |
+| Texture | present | `BodyTexture`, `set-texture`, texture tool (S-13) |
 | Erase | present | Delete key, `delete` |
 | Rectangle / rotate / zoom / pan (lesson era) | present | box tool, handles, camera rig |
 

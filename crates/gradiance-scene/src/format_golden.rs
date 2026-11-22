@@ -70,6 +70,7 @@ fn body(n: u8, depth: DepthBand) -> BodyRecord {
         optics: None,
         lifetime: None,
         surface: None,
+        texture: None,
     }
 }
 

@@ -252,6 +252,12 @@ pub(crate) fn piece_records(original: &BodyRecord, components: Vec<Contours>) ->
                 optics: original.optics,
                 lifetime: original.lifetime,
                 surface: original.surface,
+                // The image stays where it was on the page: the piece's
+                // origin moved to its centroid.
+                texture: original.texture.clone().map(|mut t| {
+                    t.offset.0 -= centroid;
+                    t
+                }),
             }
         })
         .collect()

@@ -81,6 +81,8 @@ tool_ops! {
         "Use the gear tool: press at the centre, drag out the pitch radius; drawn gears mesh.";
     UseWater => ToolState::Water, "tool.water", "water-tool", "Tools/Water", "",
         "Use the water tool: drag out a rectangle; it fills with particle water when the sim plays.";
+    UseTexture => ToolState::Texture, "tool.texture", "texture-tool", "Tools/Texture", "",
+        "Use the texture tool: drag a body's image to move it, Shift-drag to scale it, right-drag to turn it.";
     UseSketch => ToolState::Sketch, "tool.sketch", "sketch-tool", "Tools/Sketch", "",
         "Use the sketch tool: draw freehand; release makes one body of the stroke.";
     UseHinge => ToolState::Hinge, "tool.hinge", "hinge-tool", "Tools/Hinge", "H",
@@ -152,6 +154,11 @@ pub fn hints(tool: ToolState) -> &'static [Hint] {
         ToolState::Circle => &[("Press", "centre"), ("Drag", "radius")],
         ToolState::Gear => &[("Press", "centre"), ("Drag", "pitch radius")],
         ToolState::Water => &[("Drag", "water region")],
+        ToolState::Texture => &[
+            ("Drag", "move image"),
+            ("Shift+drag", "scale image"),
+            ("Right-drag", "turn image"),
+        ],
         ToolState::Polygon => &[
             ("Click", "add a vertex"),
             ("Click the start or Enter", "close"),
@@ -208,6 +215,7 @@ mod tests {
             ToolState::Laser,
             ToolState::Gear,
             ToolState::Water,
+            ToolState::Texture,
         ];
         assert_eq!(TOOL_OPS.len(), built_in.len());
         for tool in built_in {

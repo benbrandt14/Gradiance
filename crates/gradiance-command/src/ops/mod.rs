@@ -39,6 +39,7 @@ pub mod sets;
 pub mod sketch;
 pub mod spawn;
 pub mod sponge;
+pub mod texture;
 pub mod units;
 pub mod water;
 
@@ -77,6 +78,7 @@ pub fn spawned_body_record(id: StableId, shape: ShapeDef, pos: Vec2) -> BodyReco
         optics: None,
         lifetime: None,
         surface: None,
+        texture: None,
     }
 }
 
@@ -235,6 +237,7 @@ impl Plugin for SceneOpsPlugin {
             units::register(&mut registry);
             water::register(&mut registry);
             sponge::register(&mut registry);
+            texture::register(&mut registry);
         }
         app.world_mut()
             .resource_mut::<OpContextFillers>()
@@ -275,6 +278,7 @@ mod tests {
                     optics: None,
                     lifetime: None,
                     surface: None,
+                    texture: None,
                 })
                 .collect(),
             joints: vec![id(99)],
