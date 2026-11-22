@@ -68,7 +68,7 @@ impl NodeKind {
                 angle: gradiance_units::Angle(l.angle.value() + turn),
                 ..l.clone()
             })),
-            Self::Tracer(_) => None,
+            Self::Tracer(_) | Self::Water(_) => None,
         }
     }
 }
@@ -131,6 +131,11 @@ pub enum NodeKind {
     ///
     /// [`Laser`]: crate::laser::Laser
     Laser(crate::laser::Laser),
+    /// A region that fills with particle water when a run opens (the
+    /// placeable [`WaterEmitter`], brief S-11).
+    ///
+    /// [`WaterEmitter`]: crate::water::WaterEmitter
+    Water(crate::water::WaterEmitter),
 }
 
 impl NodeKind {
@@ -140,6 +145,7 @@ impl NodeKind {
             Self::Tracer(_) => "tracer",
             Self::Thruster(_) => "thruster",
             Self::Laser(_) => "laser",
+            Self::Water(_) => "water",
         }
     }
 
@@ -147,7 +153,7 @@ impl NodeKind {
     pub const fn tracer(&self) -> Option<crate::tracer::Tracer> {
         match self {
             Self::Tracer(t) => Some(*t),
-            Self::Thruster(_) | Self::Laser(_) => None,
+            Self::Thruster(_) | Self::Laser(_) | Self::Water(_) => None,
         }
     }
 }

@@ -83,7 +83,7 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Transform into gear | done | **S-5**: context menu "Make gear", `make-gear` |
 | CSG | present | `merge`, `subtract`, `intersect`, `xor`, `fillet-merge` |
 | Select objects under cursor | present | context "Select from" stack |
-| Liquify | missing | **S-11** (after S-10) |
+| Liquify | present | `body.liquify`, context "Liquify" (S-11) |
 | Make sponge (soft body) | missing | **S-12** (spring lattice) |
 | Appearance: colour, opacity, border | present | `Appearance { fill (RGBA), border, emissive }`, `set-color` |
 | Text on object | declined | owner rejected notes/annotations (2026-11-19); `label` names a body in the viewport |
@@ -121,7 +121,7 @@ jitter, water surface, laser canvas block, `signal.bind`).
 
 | Feature | Status | Where in Gradiance |
 |---|---|---|
-| Particle water, add water | partial | `Fluid` region (N-7) floats bodies; particles: **S-10** spike done (`docs/particle-fluid-decision.md`), **S-11** tools |
+| Particle water, add water | present | particles (S-10, `docs/particle-fluid-decision.md`); water tool, `water.fill`, `water.drain` (S-11); `Fluid` region (N-7) stays |
 | Refraction, total internal reflection | missing | **S-3** |
 | Mirror (index ∞) | present | every solid body reflects (N-8) |
 | Dispersion, white light | missing | **S-15** (after S-3) |

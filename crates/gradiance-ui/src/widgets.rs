@@ -387,6 +387,33 @@ pub fn labelled_drag_int<T: egui::emath::Numeric>(
 /// The largest thrust the thruster field takes, either way (N).
 const MAX_THRUST: f32 = 1.0e5;
 
+/// A water emitter's spacing row (brief S-11). True on a finished edit.
+fn water_editor(
+    ui: &mut egui::Ui,
+    salt: &str,
+    water: &mut gradiance_domain::water::WaterEmitter,
+) -> bool {
+    use gradiance_domain::water::{DEFAULT_SPACING, MAX_SPACING, MIN_SPACING};
+    let mut committed = false;
+    ui.horizontal(|ui| {
+        ui.label("spacing")
+            .on_hover_text("the distance between particles when the run fills it");
+        committed |= matches!(
+            precise_drag_clamped(
+                ui,
+                ui.id().with((salt, "water-spacing")),
+                &mut water.spacing.0,
+                DEFAULT_SPACING,
+                0.001,
+                MIN_SPACING..=MAX_SPACING,
+                Dimension::Length,
+            ),
+            Commit::Done(..)
+        );
+    });
+    committed
+}
+
 /// The behavior-node kind editor widgets.
 ///
 /// Lives here rather than beside any one host because it has three: the
@@ -494,6 +521,12 @@ pub fn node_kind_editor(
         }
         NodeKind::Laser(laser) => {
             if !laser_editor(ui, salt, laser, pick) {
+                return None;
+            }
+        }
+        // A water emitter (brief S-11): its particle spacing.
+        NodeKind::Water(water) => {
+            if !water_editor(ui, salt, water) {
                 return None;
             }
         }

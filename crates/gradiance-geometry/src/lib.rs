@@ -15,6 +15,7 @@ pub mod extrusion;
 pub mod face_field;
 pub mod gear;
 pub mod hull;
+pub mod lattice;
 pub mod partition;
 pub mod polygonize;
 pub mod profile;

@@ -5208,5 +5208,59 @@ Settings are global, so flip between the options rather than viewing them side b
             ),
             ingested_as: "docs/particle-fluid-decision.md",
         ),
+        (
+            question: (
+                id: "water-emitter-is-a-node",
+                title: "The authored water is a node",
+                source: "S-11",
+                description: r#"Liquify and the water tool need an authored record that saves and undoes. The particles are derived (S-10)."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Emitter node",
+                        caption: r#"A WaterEmitter is a NodeKind: delete, undo, save and the outliner already handle nodes."#,
+                    ),
+                    (
+                        label: "New record kind",
+                        caption: r#"A separate WaterRecord list in the scene: more code for the same behaviour."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "water-emitter-is-a-node",
+                title: "The authored water is a node",
+                choice: Picked("Emitter node"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-11 (NodeKind::Water)",
+        ),
+        (
+            question: (
+                id: "one-water-per-scene",
+                title: "One water per scene",
+                source: "S-11",
+                description: r#"The particle store holds one spacing. Two emitters with different spacings cannot share it."#,
+                decision: true,
+                options: [
+                    (
+                        label: "First emitter sets it",
+                        caption: r#"The first emitter that fills sets the spacing of all water in the run."#,
+                    ),
+                    (
+                        label: "Many stores",
+                        caption: r#"One particle store per spacing: more cost per step and no coupling between them."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "one-water-per-scene",
+                title: "One water per scene",
+                choice: Picked("First emitter sets it"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-11 (fill_from_emitters)",
+        ),
     ],
 )

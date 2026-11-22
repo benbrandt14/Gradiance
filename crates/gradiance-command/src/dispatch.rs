@@ -14,9 +14,10 @@ use crate::intent::AdjustLastIntent;
 use crate::intent::name;
 use crate::intent::{
     ArrayIntent, BooleanIntent, ClearHistoryIntent, CommitTransformIntent, CutIntent, DeleteIntent,
-    DeleteJointIntent, DuplicateIntent, GroupIntent, InsertIntent, LoadSceneIntent, MergeIntent,
-    NameGroupIntent, PropertyEditIntent, RedoIntent, RegroupIntent, ScaleIntent, SpawnBodyIntent,
-    SpawnChainIntent, SpawnJointIntent, SpawnNodeIntent, SpawnRodIntent, UndoIntent, UngroupIntent,
+    DeleteJointIntent, DuplicateIntent, GroupIntent, InsertIntent, LiquifyIntent, LoadSceneIntent,
+    MergeIntent, NameGroupIntent, PropertyEditIntent, RedoIntent, RegroupIntent, ScaleIntent,
+    SpawnBodyIntent, SpawnChainIntent, SpawnJointIntent, SpawnNodeIntent, SpawnRodIntent,
+    UndoIntent, UngroupIntent,
 };
 use crate::joint_cmd::{DeleteJointCommand, SpawnJointCommand};
 use crate::merge_cmd::MergeCommand;
@@ -24,7 +25,7 @@ use crate::property::PropertyEditCommand;
 use crate::rod_cmd::SpawnRodCommand;
 use crate::scale_cmd::ScaleCommand;
 use crate::scene_cmd::LoadSceneCommand;
-use crate::spawn::{DeleteCommand, DuplicateCommand, SpawnCommand};
+use crate::spawn::{DeleteCommand, DuplicateCommand, LiquifyCommand, SpawnCommand};
 use crate::transform_cmd::CommitTransformCommand;
 use crate::{CommandStack, GameCommand};
 use bevy::prelude::*;
@@ -105,6 +106,10 @@ command_intents! {
     BooleanIntent => |i| Box::new(MergeCommand::with_op(i.op, i.targets)),
     DuplicateIntent => |i| Box::new(DuplicateCommand::new(i.sources, i.offset)),
     DeleteIntent => |i| Box::new(DeleteCommand::new(i.targets)),
+    LiquifyIntent => |i| Box::new(LiquifyCommand {
+        targets: i.targets,
+        emitters: i.emitters,
+    }),
 }
 
 /// Drains all pending intents, builds commands, and applies them through

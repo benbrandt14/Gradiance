@@ -288,6 +288,16 @@ pub fn draw_node_glyphs(
             // A barrel along the axis marks the laser; its beam is the
             // derived path the last step traced (brief N-8). A beam that
             // reaches its target ends in an accent ring.
+            // The region an emitter fills, outlined in water blue (brief
+            // S-11); its particles draw themselves while a run has them.
+            NodeKind::Water(water) => {
+                let ring = water
+                    .outline
+                    .iter()
+                    .chain(water.outline.first())
+                    .map(|v| p + *v);
+                gizmos.linestrip_2d(ring, Color::srgba(0.25, 0.55, 0.95, 0.6));
+            }
             NodeKind::Laser(laser) => {
                 let axis = Vec2::from_angle(body.map_or(0.0, |b| b.rot) + laser.angle.0);
                 gizmos.line_2d(p + axis * r, p + axis * (r + 6.0 * s), base);
