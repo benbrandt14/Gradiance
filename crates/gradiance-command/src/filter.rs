@@ -248,6 +248,7 @@ mod tests {
             motion: None,
             optics: None,
             lifetime: None,
+            surface: None,
         }
     }
 

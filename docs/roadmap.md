@@ -775,8 +775,8 @@ Each gap below reuses an existing seam; one brief each, in this order:
    to circle, motor brake — done.
 7. **S-7** contact hit pulse signal, removal on contact, time to live
    (derived for the run, undone with it) — done.
-8. **S-8** surface velocity (conveyor); returns if avian 0.8 has no
-   contact tangent speed.
+8. **S-8** surface velocity (conveyor) — done (avian 0.8 has the
+   contact tangent speed).
 9. **S-9** camera follow, frame selection, camera verbs.
 
 Added 2026-11-21 (owner: "include the others"):

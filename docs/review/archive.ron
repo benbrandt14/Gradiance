@@ -5127,5 +5127,32 @@ Settings are global, so flip between the options rather than viewing them side b
             ),
             ingested_as: "physics::lifetime",
         ),
+        (
+            question: (
+                id: "surface-speed-sign",
+                title: "Which way does a positive surface speed run?",
+                source: "S-8",
+                description: r#"A conveyor needs one sign convention for its surface speed."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Counter-clockwise",
+                        caption: r#"Positive runs counter-clockwise along the outline (the brief's convention), so a positive top carries a load left."#,
+                    ),
+                    (
+                        label: "Rightward on top",
+                        caption: r#"Positive carries a load on the top to the right; the sign then depends on which face a load rests on."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "surface-speed-sign",
+                title: "Which way does a positive surface speed run?",
+                choice: Picked("Counter-clockwise"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "domain::surface",
+        ),
     ],
 )

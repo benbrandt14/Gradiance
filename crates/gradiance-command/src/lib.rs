@@ -542,6 +542,7 @@ impl Plugin for CommandPlugin {
         app.register_type::<gradiance_domain::motion::InitialMotion>();
         app.register_type::<gradiance_domain::optics::Optics>();
         app.register_type::<gradiance_domain::lifetime::Lifetime>();
+        app.register_type::<gradiance_domain::surface::SurfaceSpeed>();
         app.add_systems(
             Update,
             dispatch::dispatch_intents.in_set(CommandDispatchSet),

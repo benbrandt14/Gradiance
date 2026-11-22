@@ -161,6 +161,7 @@ fn spawn_body_intent_round_trips_through_reflection() {
         motion: None,
         optics: None,
         lifetime: None,
+        surface: None,
     };
     let intent = SpawnBodyIntent {
         record: record.clone(),

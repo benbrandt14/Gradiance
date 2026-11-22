@@ -251,6 +251,7 @@ pub(crate) fn piece_records(original: &BodyRecord, components: Vec<Contours>) ->
                 motion: original.motion,
                 optics: original.optics,
                 lifetime: original.lifetime,
+                surface: original.surface,
             }
         })
         .collect()

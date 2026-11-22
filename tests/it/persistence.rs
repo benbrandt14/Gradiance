@@ -151,6 +151,9 @@ fn body_strategy() -> impl Strategy<Value = BodyRecord> {
                         remove_on_contact: y > 0.0,
                         ttl: Some(gradiance::units::Time(1.0 + rot.abs())),
                     }),
+                    surface: (y < 0.0).then_some(gradiance::domain::surface::SurfaceSpeed(
+                        gradiance::units::Velocity(x + 0.5),
+                    )),
                 }
             },
         )

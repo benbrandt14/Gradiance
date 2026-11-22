@@ -60,6 +60,8 @@ pub struct BodySnapshot {
     pub optics: Option<gradiance_domain::optics::Optics>,
     /// Removal during a run (brief S-7).
     pub lifetime: Option<gradiance_domain::lifetime::Lifetime>,
+    /// The conveyor speed, if any (brief S-8).
+    pub surface: Option<gradiance_domain::surface::SurfaceSpeed>,
 }
 
 impl BodySnapshot {
@@ -215,6 +217,9 @@ pub fn snapshot_scene(world: &mut World) -> SceneSnapshot {
                 optics: entity.get::<gradiance_domain::optics::Optics>().copied(),
                 lifetime: entity
                     .get::<gradiance_domain::lifetime::Lifetime>()
+                    .copied(),
+                surface: entity
+                    .get::<gradiance_domain::surface::SurfaceSpeed>()
                     .copied(),
             }
         })

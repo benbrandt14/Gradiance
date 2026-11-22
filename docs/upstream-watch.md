@@ -42,3 +42,12 @@ which its `LICENSE-BRAND` reserves. Port nothing from those folders.
   (`physics::seed_last_physics_tick`); pinned by `tests/it/physics_sync.rs`
   `a_paused_place_survives_a_step`. Recheck on each avian upgrade; drop the
   seed when avian starts from a real tick.
+- **avian2d 0.8 — a contact-modify flag added later is never seen**
+  (S-8, 2026-11-22). The `Insert<ActiveCollisionHooks>` observer in
+  `collider_tree/update.rs` (case 10) updates the proxy's `CUSTOM_FILTER`
+  flag but not `MODIFY_CONTACTS`, which is read only when the proxy is
+  made. A body that gains the flag after its collider exists never calls
+  `modify_contacts`. Gradiance makes the flag a required component of
+  every `Body` (`physics::surface::install`); a body with no surface speed
+  adds 0. Recheck on each avian upgrade; when fixed, put the flag only on
+  bodies with a `SurfaceSpeed`.

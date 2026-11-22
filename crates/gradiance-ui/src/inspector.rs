@@ -62,6 +62,7 @@ pub struct BodyProps<'w, 's> {
     motion_q: Query<'w, 's, &'static gradiance_domain::motion::InitialMotion, With<Body>>,
     optics_q: Query<'w, 's, &'static gradiance_domain::optics::Optics, With<Body>>,
     lifetime_q: Query<'w, 's, &'static gradiance_domain::lifetime::Lifetime, With<Body>>,
+    surface_q: Query<'w, 's, &'static gradiance_domain::surface::SurfaceSpeed, With<Body>>,
     friction_q: Query<'w, 's, &'static Friction, With<Body>>,
     restitution_q: Query<'w, 's, &'static Restitution, With<Body>>,
     density_q: Query<'w, 's, &'static ColliderDensity, With<Body>>,
@@ -344,6 +345,46 @@ pub fn physics_section(ui: &mut egui::Ui, selection: &Selection, props: &mut Bod
     tracer_block(ui, selection, props, primary);
     motion_block(ui, selection, props, primary);
     lifetime_block(ui, selection, props, primary);
+    surface_row(ui, selection, props, primary);
+}
+
+/// The conveyor row (brief S-8): the surface speed along the outline, in
+/// m/s; 0 is a still surface. One undo step per gesture.
+fn surface_row(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProps, primary: Entity) {
+    use gradiance_domain::surface::{MAX_SURFACE_SPEED, SurfaceSpeed};
+    use gradiance_units::Velocity;
+    let mut speed = props.surface_q.get(primary).map_or(0.0, |s| s.0.0);
+    ui.horizontal(|ui| {
+        ui.label("surface speed").on_hover_text(
+            "a conveyor: the surface runs along the outline (positive counter-clockwise) and carries what rests on it",
+        );
+        if let Commit::Done(_, new) = precise_drag_clamped(
+            ui,
+            ui.id().with("surface-speed"),
+            &mut speed,
+            0.0,
+            0.01,
+            -MAX_SURFACE_SPEED..=MAX_SURFACE_SPEED,
+            Dimension::Velocity,
+        ) {
+            let new = SurfaceSpeed(Velocity(new)).sanitized();
+            let changes: Vec<PropertyChange> = selection
+                .iter()
+                .filter_map(|e| {
+                    let id = props.ids.get(e).ok().copied()?;
+                    let old = props.surface_q.get(e).ok().copied();
+                    (old != new).then_some(PropertyChange {
+                        id,
+                        old: PropertyValue::SurfaceSpeed(old),
+                        new: PropertyValue::SurfaceSpeed(new),
+                    })
+                })
+                .collect();
+            if !changes.is_empty() {
+                props.edits.write(PropertyEditIntent { changes });
+            }
+        }
+    });
 }
 
 /// The lifetime editor (brief S-7): remove what this body touches, and

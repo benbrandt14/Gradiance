@@ -92,7 +92,7 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Material: mass entry | partial | density only; mass is derived (the field was in the rejected presets brief) |
 | Material: refractive index | done | **S-3** (`Optics`, `set-index`, inspector) |
 | Material: attraction | present | `FieldSource` (`domain::field`, M20) |
-| Material: surface velocity (conveyor) | missing | **S-8** |
+| Material: surface velocity (conveyor) | done | **S-8**: `set-surface-speed`, inspector "surface speed" (avian contact tangent speed) |
 | Material presets (wood, glass, …) | rejected | owner, 2026-11-21 |
 | Velocity: set linear and angular velocity | done | **S-1** (#306: `InitialMotion`, `set-velocity`, `set-spin`) |
 | Information: mass, position, speed, spin, momentum, angular momentum, kinetic energy | present | quantity catalog (`quantity`), signal sources, Probe panel |
