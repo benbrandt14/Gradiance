@@ -783,7 +783,7 @@ Added 2026-11-21 (owner: "include the others"):
 
 10. **S-10** particle fluid: spike + decision note (method, body
     coupling, budget) — done. 11. **S-11** liquify, water fill, drain — done.
-12. **S-12** sponge: a spring lattice inside the outline.
+12. **S-12** sponge: a spring lattice inside the outline — done.
 13. **S-13** image texture on a body (through the toon ramp or raw).
 14. **S-14** shape from an image (alpha → field leaf or traced polygon).
 15. **S-15** dispersion and white light (after S-3).

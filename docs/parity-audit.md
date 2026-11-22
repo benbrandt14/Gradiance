@@ -84,7 +84,7 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | CSG | present | `merge`, `subtract`, `intersect`, `xor`, `fillet-merge` |
 | Select objects under cursor | present | context "Select from" stack |
 | Liquify | present | `body.liquify`, context "Liquify" (S-11) |
-| Make sponge (soft body) | missing | **S-12** (spring lattice) |
+| Make sponge (soft body) | present | `body.sponge`, context "Make sponge" (S-12, spring lattice) |
 | Appearance: colour, opacity, border | present | `Appearance { fill (RGBA), border, emissive }`, `set-color` |
 | Text on object | declined | owner rejected notes/annotations (2026-11-19); `label` names a body in the viewport |
 | Geometry from image | missing | **S-14** |

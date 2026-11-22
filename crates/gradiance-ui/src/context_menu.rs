@@ -660,6 +660,24 @@ pub fn context_menu(
                         close = true;
                     }
                 }
+                // Make sponge (brief S-12): the operation's auto spacing and
+                // default stiffness; Adjust Last Operation tunes both.
+                if row_enabled(
+                    ui,
+                    "Make sponge",
+                    "replace the body by circles joined by springs, inside its outline",
+                    !selected_ids.is_empty(),
+                ) {
+                    writers.invoke.write(InvokeOp::with(
+                        "body.sponge",
+                        json!({
+                            "i": "selection",
+                            "spacing": 0.0,
+                            "stiffness": gradiance_command::ops::sponge::SPONGE_STIFFNESS,
+                        }),
+                    ));
+                    close = true;
+                }
                 if row_enabled(ui, "Merge into one body", "", selected_ids.len() >= 2) {
                     writers.invoke.write(InvokeOp::with(
                         "body.merge",
