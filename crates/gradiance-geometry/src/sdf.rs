@@ -255,6 +255,28 @@ pub fn thinnest_solid(shape: &ShapeDef) -> Option<f32> {
     }
 }
 
+/// A conservative world-space bounding box `(min, max)` of `shape` posed
+/// at `pos`, turned by `rot` radians: the local [`aabb`]'s corners, turned
+/// and moved, then boxed again. The camera frame (brief S-9) and the
+/// context menu's box both read it.
+pub fn world_aabb(shape: &ShapeDef, pos: Vec2, rot: f32) -> (Vec2, Vec2) {
+    let (min, max) = aabb(shape);
+    let turn = Vec2::from_angle(rot);
+    let corners = [
+        Vec2::new(min.x, min.y),
+        Vec2::new(max.x, min.y),
+        Vec2::new(max.x, max.y),
+        Vec2::new(min.x, max.y),
+    ];
+    corners.into_iter().fold(
+        (Vec2::splat(f32::MAX), Vec2::splat(f32::MIN)),
+        |(lo, hi), c| {
+            let w = pos + turn.rotate(c);
+            (lo.min(w), hi.max(w))
+        },
+    )
+}
+
 /// A conservative axis-aligned bounding box `(min, max)` of the solid
 /// region, in shape-local space.
 ///

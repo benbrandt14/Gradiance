@@ -113,6 +113,7 @@ impl Plugin for InteractionPlugin {
         app.add_message::<pack::PackControl>();
         app.init_resource::<camera::CameraRig>();
         app.init_resource::<camera::CameraScale>();
+        app.add_message::<camera::CameraRequest>();
 
         // The operation registry: the selection mirror `"selection"` targets
         // resolve against (menus and keys), and an invoked key edit becomes a
@@ -154,6 +155,8 @@ impl Plugin for InteractionPlugin {
                 camera::apply_projection
                     .run_if(resource_changed::<gradiance_domain::settings::ScenerySettings>),
                 camera::pan_and_zoom_camera,
+                camera::apply_camera_requests,
+                camera::follow_and_glide,
                 camera::apply_camera_rig,
                 input::apply_shortcuts,
                 selection::prune_dead_selection,

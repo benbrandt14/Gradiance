@@ -18,6 +18,7 @@ mod array_drag;
 mod body_arrows;
 mod booleans;
 mod buoyancy;
+mod camera_views;
 mod chains;
 mod client;
 mod clipboard;

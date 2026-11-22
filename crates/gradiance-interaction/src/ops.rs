@@ -9,11 +9,13 @@
 //! and record no undo step, so reverting a scene edit can never move
 //! someone's camera feel or restyle their panels.
 
+use crate::camera::{CameraRequest, ViewTarget};
 use bevy::prelude::*;
+use gradiance_command::snapshot::SceneSnapshot;
 use gradiance_domain::settings::{CameraSettings, Chrome, ChromeSettings, UnitSettings};
 use gradiance_op::reflect_path::read_path;
 use gradiance_op::{
-    OpContext, OpContextFillers, OpError, OpMeta, OpOutput, OpRegistry, Operation, Seam,
+    OpContext, OpContextFillers, OpError, OpMeta, OpOutput, OpRegistry, Operation, Seam, Target,
 };
 use gradiance_units::{AngleUnit, LengthUnit, UnitPrefs};
 use serde::Deserialize;
@@ -24,6 +26,9 @@ pub(crate) fn install(app: &mut App) {
         let mut registry = app.world_mut().resource_mut::<OpRegistry>();
         registry.register::<CameraGet>();
         registry.register::<CameraSet>();
+        registry.register::<CameraFollow>();
+        registry.register::<CameraFrame>();
+        registry.register::<CameraLook>();
         registry.register::<ChromeApply>();
         registry.register::<ChromeList>();
         registry.register::<UnitsDisplay>();
@@ -97,6 +102,116 @@ impl Operation for CameraSet {
     fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
         let settings = ctx.get::<CameraSettings>()?;
         Ok(OpOutput::none().setting(settings, &self.path, self.value)?)
+    }
+}
+
+/// Follow a body with the camera (brief S-9). Editor state: no undo step.
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct CameraFollow {
+    /// The body; a target that names no body (`-1`) stops following.
+    pub i: Target,
+}
+
+impl Operation for CameraFollow {
+    const META: OpMeta = OpMeta {
+        id: "camera.follow",
+        lisp: "camera-follow",
+        doc: "Keep the i-th body at the centre of the view while it moves; -1 (or a pan by hand) stops following. Editor state, never undone.",
+        seam: Seam::Editor,
+        menu: Some("View/Follow selection"),
+        chord: None,
+        undo: None,
+        example: r#"{"i": 0}"#,
+    };
+
+    fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
+        let scene = ctx.get::<SceneSnapshot>()?;
+        let body = gradiance_command::ops::body_of(ctx, scene, &self.i)?.map(|b| b.id);
+        Ok(OpOutput::none().message(CameraRequest::Follow(body)))
+    }
+}
+
+/// Glide the camera to show bodies (brief S-9). Editor state: no undo step.
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct CameraFrame {
+    /// The bodies to show; empty: every body but the grounds.
+    pub targets: Vec<Target>,
+}
+
+impl Operation for CameraFrame {
+    const META: OpMeta = OpMeta {
+        id: "camera.frame",
+        lisp: "camera-frame",
+        doc: "Glide the view to show the bodies named (an empty list: every body but the grounds) with a margin. Editor state, never undone.",
+        seam: Seam::Editor,
+        menu: Some("View/Frame selection"),
+        chord: Some("."),
+        undo: None,
+        example: r#"{"targets": []}"#,
+    };
+
+    fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
+        let scene = ctx.get::<SceneSnapshot>()?;
+        let named: Vec<_> = if self.targets.is_empty() {
+            scene
+                .bodies
+                .iter()
+                .filter(|b| !b.shape.contains_half_plane())
+                .map(|b| b.id)
+                .collect()
+        } else {
+            gradiance_command::ops::body_set(ctx, scene, &self.targets)?
+        };
+        let bounds = named
+            .into_iter()
+            .filter_map(|id| scene.get(id))
+            .map(|b| gradiance_geometry::sdf::world_aabb(&b.shape, b.pos, b.rot))
+            .reduce(|(lo, hi), (a, b)| (lo.min(a), hi.max(b)));
+        Ok(match bounds {
+            Some((min, max)) => OpOutput::none().message(CameraRequest::Frame(min, max)),
+            None => OpOutput::none(),
+        })
+    }
+}
+
+/// Glide the camera to a point and a zoom (brief S-9). Editor state: no
+/// undo step.
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct CameraLook {
+    /// The focus x, in metres.
+    pub x: f64,
+    /// The focus y, in metres.
+    pub y: f64,
+    /// Screen pixels per metre (100 is the start view); 0 or less keeps the
+    /// zoom.
+    pub zoom: f64,
+}
+
+impl Operation for CameraLook {
+    const META: OpMeta = OpMeta {
+        id: "camera.look",
+        lisp: "camera-look",
+        doc: "Glide the view to centre (x, y) at zoom screen pixels per metre (100 is the start view; 0 keeps the zoom); stops a follow. Editor state, never undone.",
+        seam: Seam::Editor,
+        menu: None,
+        chord: None,
+        undo: None,
+        example: r#"{"x": 0, "y": 2, "zoom": 50}"#,
+    };
+
+    #[allow(clippy::cast_possible_truncation)]
+    fn lower(self, _ctx: &OpContext) -> Result<OpOutput, OpError> {
+        if !(self.x.is_finite() && self.y.is_finite() && self.zoom.is_finite()) {
+            return Err(OpError::Invalid("camera-look takes finite numbers".into()));
+        }
+        let zoom = self.zoom as f32;
+        Ok(OpOutput::none().message(CameraRequest::Look(ViewTarget {
+            focus: Vec2::new(self.x as f32, self.y as f32),
+            world_per_pixel: (zoom > 0.0).then(|| 1.0 / zoom),
+        })))
     }
 }
 

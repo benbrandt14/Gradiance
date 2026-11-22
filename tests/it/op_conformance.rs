@@ -515,7 +515,9 @@ fn every_key_row_acts_on_the_selection_and_a_script_cannot() {
                 .flat_map(|t| t.writes.clone())
                 .collect::<String>();
             wrote |= !text.is_empty();
-            if names_selection && !text.is_empty() {
+            // An edit names exactly the selected objects. An editor row (the
+            // camera frame) writes a view of them, not their ids.
+            if names_selection && entry.meta.seam == Seam::Edit && !text.is_empty() {
                 for (i, id) in bodies.iter().enumerate() {
                     let selected = !selected_joint && picked.contains(&i);
                     assert_eq!(

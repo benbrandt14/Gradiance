@@ -32,7 +32,7 @@ const fn key(name: &'static str, code: KeyCode) -> NamedKey {
 /// Every key a graph input can bind, in a fixed order (a row's index is its
 /// bit in a [`KeySet`]; append only, never reorder: nothing persists the
 /// index, but tests pin a few).
-pub const KEYS: [NamedKey; 63] = [
+pub const KEYS: [NamedKey; 64] = [
     key("A", KeyCode::KeyA),
     key("B", KeyCode::KeyB),
     key("C", KeyCode::KeyC),
@@ -96,10 +96,13 @@ pub const KEYS: [NamedKey; 63] = [
     key("Down", KeyCode::ArrowDown),
     key("Left", KeyCode::ArrowLeft),
     key("Right", KeyCode::ArrowRight),
+    // The frame-selection key (brief S-9). The table is now full: a KeySet
+    // is a u64.
+    key(".", KeyCode::Period),
 ];
 
 /// Other spellings a lookup accepts, and the canonical name each means.
-const ALIASES: [(&str, &str); 8] = [
+const ALIASES: [(&str, &str); 9] = [
     ("esc", "Escape"),
     ("return", "Enter"),
     ("del", "Delete"),
@@ -108,10 +111,11 @@ const ALIASES: [(&str, &str); 8] = [
     ("arrowleft", "Left"),
     ("arrowright", "Right"),
     ("spacebar", "Space"),
+    ("period", "."),
 ];
 
 /// The table row of the key written `name` (case-insensitive, aliases
-/// allowed). Allocation-free: a scan of 63 short names.
+/// allowed). Allocation-free: a scan of 64 short names.
 pub fn key_index(name: &str) -> Option<usize> {
     let name = name.trim();
     let canonical = ALIASES

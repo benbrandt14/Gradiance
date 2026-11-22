@@ -308,6 +308,31 @@ pub(crate) const MIRROR_ROWS: [(&str, &str); 2] = [
     ("Mirror vertically", "body.mirror_v"),
 ];
 
+/// View-menu camera rows (brief S-9): label, operation, params, key. The
+/// `.` key invokes the first row's operation through `KEY_OPS`.
+type CameraRow = (
+    &'static str,
+    &'static str,
+    fn() -> gradiance_op::Value,
+    &'static str,
+);
+pub(crate) const CAMERA_ROWS: [CameraRow; 4] = [
+    (
+        "Frame selection",
+        "camera.frame",
+        || json!({"targets": ["selection"]}),
+        ".",
+    ),
+    ("Frame all", "camera.frame", || json!({"targets": []}), ""),
+    (
+        "Follow selection",
+        "camera.follow",
+        || json!({"i": "selection"}),
+        "",
+    ),
+    ("Stop following", "camera.follow", || json!({"i": -1}), ""),
+];
+
 /// The View menu, as a table over the panel registry.
 ///
 /// Every panel implements [`PanelToggle`], so the two idioms that used to need
@@ -333,6 +358,16 @@ fn view_menu(
                 ui.separator();
             }
             toggle_item(ui, menu_label(name), shortcut_for(name), &mut **panel);
+        }
+        ui.separator();
+        for (label, id, params, shortcut) in CAMERA_ROWS {
+            if ui
+                .add(egui::Button::new(label).shortcut_text(shortcut))
+                .clicked()
+            {
+                invoke.write(InvokeOp::with(id, params()));
+                ui.close();
+            }
         }
         ui.separator();
         ui.checkbox(&mut grid.visible, "Grid");
