@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 154 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 155 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -37,6 +37,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `body.restitution` | `(body-restitution i)` | query | — | — | Bounciness of the i-th body. | `{"i": 0}` |
 | `body.rot` | `(body-rot i)` | query | — | — | Rotation (radians) of the i-th body; NaN if out of range. | `{"i": 0}` |
 | `body.scale` | `(scale i fx fy)` | edit | `scale` | — | Resize the i-th body by (fx, fy) about its own centre, along its own axes. | `{"i": 0, "fx": 2, "fy": 1.5}` |
+| `body.set_arrows` | `(set-arrows i velocity momentum force)` | edit | `property-edit` | — | Choose which motion arrows the i-th body shows while it plays: velocity, momentum, force (non-zero = on) — undoable, saved. The arrow length is Settings > Camera > arrow scale. | `{"i": 0, "velocity": 1, "momentum": 0, "force": 1}` |
 | `body.set_color` | `(set-color i r g b)` | edit | `property-edit` | — | Set the i-th body's fill to (r, g, b), each in 0..1 — undoable. | `{"i": 0, "r": 0.9, "g": 0.3, "b": 0.1}` |
 | `body.set_density` | `(set-density i v)` | edit | `property-edit` | — | Set the i-th body's mass density (area x density = mass) — undoable. | `{"i": 0, "v": 3}` |
 | `body.set_fluid` | `(set-fluid i density [drag])` | edit | `property-edit` | — | Make the i-th body a fluid of density (kg/m2) and drag (1/s): bodies inside float or sink by their density and are damped; making a fluid also makes it a static sensor. Density 0 turns the fluid off — undoable. | `{"i": 0, "density": 2, "drag": 2}` |

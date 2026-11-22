@@ -15,6 +15,7 @@ mod actuators;
 mod adjust_last;
 mod air_drag;
 mod array_drag;
+mod body_arrows;
 mod booleans;
 mod buoyancy;
 mod chains;

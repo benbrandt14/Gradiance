@@ -36,6 +36,7 @@ pub(super) fn register(registry: &mut OpRegistry) {
     registry.register::<SetFluid>();
     registry.register::<SetVelocity>();
     registry.register::<SetSpin>();
+    registry.register::<SetArrows>();
 }
 
 /// Move the body `i` to (`x`, `y`) and rotate it to `angle`: one undo step.
@@ -633,5 +634,58 @@ impl Operation for SetSpin {
             spin: gradiance_units::AngularVelocity(self.w),
             ..m
         })
+    }
+}
+
+/// Choose a body's motion arrows (brief S-2b).
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct SetArrows {
+    /// The body.
+    pub i: Target,
+    /// Non-zero: draw its velocity arrow.
+    pub velocity: f32,
+    /// Non-zero: draw its momentum arrow.
+    pub momentum: f32,
+    /// Non-zero: draw its net-force arrow.
+    pub force: f32,
+}
+
+impl Operation for SetArrows {
+    const META: OpMeta = OpMeta {
+        id: "body.set_arrows",
+        lisp: "set-arrows",
+        doc: "Choose which motion arrows the i-th body shows while it plays: velocity, momentum, force (non-zero = on) — undoable, saved. The arrow length is Settings > Camera > arrow scale.",
+        seam: Seam::Edit,
+        menu: None,
+        chord: None,
+        undo: Some(name::PROPERTY_EDIT),
+        example: r#"{"i": 0, "velocity": 1, "momentum": 0, "force": 1}"#,
+    };
+
+    fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
+        let scene = ctx.get::<SceneSnapshot>()?;
+        let arrows = gradiance_domain::appearance::BodyArrows {
+            velocity: self.velocity != 0.0,
+            momentum: self.momentum != 0.0,
+            force: self.force != 0.0,
+        };
+        let changes: Vec<PropertyChange> = bodies_of(ctx, scene, &self.i)?
+            .into_iter()
+            .filter_map(|id| scene.get(id))
+            .filter(|body| body.appearance.arrows != arrows)
+            .map(|body| PropertyChange {
+                id: body.id,
+                old: PropertyValue::Appearance(body.appearance),
+                new: PropertyValue::Appearance(Appearance {
+                    arrows,
+                    ..body.appearance
+                }),
+            })
+            .collect();
+        if changes.is_empty() {
+            return Ok(OpOutput::none());
+        }
+        Ok(OpOutput::none().message(PropertyEditIntent { changes }))
     }
 }

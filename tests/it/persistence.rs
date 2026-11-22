@@ -696,6 +696,7 @@ fn camera_settings_round_trip_and_pre_camera_files_parse() {
         zoom_step: 0.8,
         pan_speed: 250.0,
         orbit_speed_deg: 0.75,
+        arrow_scale: 0.5,
     };
     let scene = SceneRecord {
         version: gradiance::scene::FORMAT_VERSION,

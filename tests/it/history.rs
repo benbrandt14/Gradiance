@@ -340,6 +340,7 @@ fn camera_settings_are_workstation_config() {
         zoom_step: 0.7,
         pan_speed: 123.0,
         orbit_speed_deg: 1.0,
+        arrow_scale: 0.5,
     };
     *app.world_mut().resource_mut::<CameraSettings>() = tweaked.clone();
     app.update();

@@ -404,6 +404,13 @@ pub const WHITE_LIGHT: Rgba = Rgba::rgb(1.0, 1.0, 1.0);
 /// every look.
 pub const FLUID_SURFACE_LIFT: Rgba = Rgba::rgb(1.0, 1.0, 1.0);
 
+/// A body's velocity arrow (brief S-2b).
+pub const ARROW_VELOCITY: Rgba = Rgba::rgb(0.95, 0.78, 0.18);
+/// A body's momentum arrow (brief S-2b).
+pub const ARROW_MOMENTUM: Rgba = Rgba::rgb(0.35, 0.72, 0.95);
+/// A body's net-force arrow (brief S-2b).
+pub const ARROW_FORCE: Rgba = Rgba::rgb(0.92, 0.36, 0.32);
+
 /// The deep-water tone the `Deep` fluid look darkens its fill toward.
 pub const FLUID_DEPTH_TONE: Rgba = Rgba::rgb(0.02, 0.06, 0.16);
 /// The studio key: a warm lamp.

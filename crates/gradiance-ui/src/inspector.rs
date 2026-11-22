@@ -874,7 +874,47 @@ pub fn appearance_section(ui: &mut egui::Ui, selection: &Selection, props: &mut 
                 } else {
                     old.emissive
                 },
+                ..*old
             },
+            &mut props.edits,
+        );
+    }
+    arrows_row(ui, selection, props, appearance.arrows);
+}
+
+/// The motion-arrow toggles of the Appearance section (brief S-2b): one
+/// checkbox per arrow, one undo step per click.
+fn arrows_row(
+    ui: &mut egui::Ui,
+    selection: &Selection,
+    props: &mut BodyProps,
+    current: gradiance_domain::appearance::BodyArrows,
+) {
+    let mut arrows = current;
+    let mut arrows_changed = false;
+    ui.horizontal(|ui| {
+        ui.label("arrows")
+            .on_hover_text("draw this body's motion while it plays");
+        arrows_changed |= ui
+            .checkbox(&mut arrows.velocity, "velocity")
+            .on_hover_text("its velocity")
+            .changed();
+        arrows_changed |= ui
+            .checkbox(&mut arrows.momentum, "momentum")
+            .on_hover_text("its momentum, mass times velocity")
+            .changed();
+        arrows_changed |= ui
+            .checkbox(&mut arrows.force, "force")
+            .on_hover_text("the net force on it, mass times its acceleration")
+            .changed();
+    });
+    if arrows_changed {
+        commit_to_selection(
+            selection,
+            &props.ids,
+            &props.appearance_q,
+            PropertyValue::Appearance,
+            |old| Appearance { arrows, ..*old },
             &mut props.edits,
         );
     }

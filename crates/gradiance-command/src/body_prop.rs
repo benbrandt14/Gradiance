@@ -42,6 +42,12 @@ pub enum BodyProp {
     Palette,
     /// Emissive strength: 0 is matte, higher glows in the fill's hue.
     Emissive,
+    /// 1 when the body shows its velocity arrow (brief S-2b).
+    ArrowVelocity,
+    /// 1 when the body shows its momentum arrow.
+    ArrowMomentum,
+    /// 1 when the body shows its net-force arrow.
+    ArrowForce,
 }
 
 /// One row of [`BODY_PROPS`].
@@ -112,6 +118,21 @@ pub const BODY_PROPS: &[BodyPropRow] = &[
         prop: BodyProp::Emissive,
         doc: "Glow strength in the fill's hue: 0 is matte (a write clamps at 0).",
     },
+    BodyPropRow {
+        name: "arrow-velocity",
+        prop: BodyProp::ArrowVelocity,
+        doc: "1 = draw the body's velocity arrow while it plays.",
+    },
+    BodyPropRow {
+        name: "arrow-momentum",
+        prop: BodyProp::ArrowMomentum,
+        doc: "1 = draw the body's momentum arrow (mass times velocity).",
+    },
+    BodyPropRow {
+        name: "arrow-force",
+        prop: BodyProp::ArrowForce,
+        doc: "1 = draw the net-force arrow (mass times acceleration).",
+    },
 ];
 
 /// Whether a scalar is "on" for a flag property.
@@ -164,6 +185,9 @@ impl BodyProp {
             Self::Hue => f64::from(body.appearance.fill.to_hsl().0),
             Self::Palette => palette_slot(body.appearance.fill).map_or(f64::NAN, |s| s as f64),
             Self::Emissive => f64::from(body.appearance.emissive),
+            Self::ArrowVelocity => bit(body.appearance.arrows.velocity),
+            Self::ArrowMomentum => bit(body.appearance.arrows.momentum),
+            Self::ArrowForce => bit(body.appearance.arrows.force),
         }
     }
 
@@ -235,6 +259,20 @@ impl BodyProp {
                         emissive: f.max(0.0),
                         ..old
                     }),
+                )
+            }
+            Self::ArrowVelocity | Self::ArrowMomentum | Self::ArrowForce => {
+                let old = body.appearance;
+                let mut arrows = old.arrows;
+                let slot = match self {
+                    Self::ArrowVelocity => &mut arrows.velocity,
+                    Self::ArrowMomentum => &mut arrows.momentum,
+                    _ => &mut arrows.force,
+                };
+                *slot = flag(v);
+                (
+                    PropertyValue::Appearance(old),
+                    PropertyValue::Appearance(Appearance { arrows, ..old }),
                 )
             }
         }

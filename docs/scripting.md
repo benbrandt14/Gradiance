@@ -165,6 +165,8 @@ across and ±3.5 m up and down); angles are radians.
 (set-spin i w)               ; the spin (rad/s, CCW) it starts a run with;
                              ; applied when play starts from an edited
                              ; layout, not on resume (brief S-1)
+(set-arrows i v m f)         ; show the body's velocity / momentum / force
+                             ; arrows while it plays (1 = on; brief S-2b)
 (scale i fx fy)              ; resize about the body's own centre, own axes
 (mirror-h (list i …))        ; mirror left to right about the bodies' centre,
 (mirror-v (list i …))        ; or top to bottom; joints and nodes follow

@@ -5,6 +5,7 @@
 //! rebuilt from authored components by `Changed<>`-driven sync systems and
 //! never serialized.
 
+pub mod arrows;
 pub mod debug_viz;
 pub mod decorations;
 pub mod extrude_sync;
@@ -90,6 +91,7 @@ impl Plugin for GradianceRenderPlugin {
                 decorations::draw_circle_radius_lines,
                 decorations::draw_body_borders,
                 decorations::draw_fluid_surfaces,
+                arrows::draw_body_arrows,
                 debug_viz::draw_debug_overlays,
                 tracer::draw_traces,
                 tracer::draw_node_glyphs,

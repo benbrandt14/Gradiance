@@ -144,6 +144,9 @@ pub struct CameraSettings {
     pub pan_speed: f32,
     /// Middle-drag orbit sensitivity in degrees per screen pixel.
     pub orbit_speed_deg: f32,
+    /// How long the per-body motion arrows draw (brief S-2b): metres per
+    /// unit, so 1 m/s, 1 kg·m/s or 1 N draws this many metres.
+    pub arrow_scale: f32,
 }
 
 impl Default for CameraSettings {
@@ -152,6 +155,7 @@ impl Default for CameraSettings {
             zoom_step: 0.94,
             pan_speed: 600.0,
             orbit_speed_deg: 0.3,
+            arrow_scale: 0.25,
         }
     }
 }
@@ -172,6 +176,7 @@ impl CameraSettings {
             zoom_step: finite(self.zoom_step, d.zoom_step).clamp(lo, hi),
             pan_speed: finite(self.pan_speed, d.pan_speed).max(0.0),
             orbit_speed_deg: finite(self.orbit_speed_deg, d.orbit_speed_deg).max(0.0),
+            arrow_scale: finite(self.arrow_scale, d.arrow_scale).max(0.0),
         }
     }
 }
@@ -830,10 +835,12 @@ mod tests {
             zoom_step: 1.5,
             pan_speed: -3.0,
             orbit_speed_deg: f32::NAN,
+            arrow_scale: -1.0,
         }
         .sanitized();
         assert_eq!(bad.zoom_step, CameraSettings::ZOOM_STEP_RANGE.1);
         assert_eq!(bad.pan_speed, 0.0);
+        assert_eq!(bad.arrow_scale, 0.0);
         assert_eq!(bad.orbit_speed_deg, ok.orbit_speed_deg);
         assert_eq!(
             CameraSettings {
