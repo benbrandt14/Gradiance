@@ -5019,5 +5019,32 @@ Settings are global, so flip between the options rather than viewing them side b
             ),
             ingested_as: "FluidLook::default() = Flat (crates/gradiance-domain/src/settings.rs); goldens regenerated",
         ),
+        (
+            question: (
+                id: "adjust-last-omitted-optional",
+                title: "How does Adjust Last show an optional field the call left out?",
+                source: "Phase S defect (roadmap screenshot after set-fluid): the panel showed drag null",
+                description: r#"An operation with an Option field (set-fluid's drag, make-gear's teeth) picks a value when the call omits it. The Adjust Last panel printed the JSON null."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Read-only auto",
+                        caption: r#"The row reads auto, not editable: the panel does not know the value the operation picked, and a seeded number would show a value the body does not have."#,
+                    ),
+                    (
+                        label: "Editable, seeded with the example",
+                        caption: r#"An editable number starting at the operation's example value; one drag sets it, but before that it shows a wrong value."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "adjust-last-omitted-optional",
+                title: "How does Adjust Last show an optional field the call left out?",
+                choice: Picked("Read-only auto"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "crates/gradiance-ui/src/adjust_panel.rs short()",
+        ),
     ],
 )

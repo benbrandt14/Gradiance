@@ -109,6 +109,7 @@ impl Plugin for GradiancePhysicsPlugin {
         // this frame resets at the top of each frame.
         app.init_resource::<SimStep>();
         app.add_systems(First, clear_stepped_flag);
+        app.add_systems(PostStartup, seed_last_physics_tick);
         app.add_systems(FixedFirst, advance_owed_step);
         app.add_systems(
             Update,
@@ -316,6 +317,25 @@ impl SimStep {
 /// behaves as the same span played.
 pub fn sim_running(state: Res<State<GameState>>, step: Res<SimStep>) -> bool {
     *state.get() == GameState::Playing || step.active()
+}
+
+/// Gives avian's `LastPhysicsTick` a real tick before physics first runs.
+///
+/// avian keeps it at 0 until its schedule has run once and then, on that
+/// first run, compares every change against tick 1 instead of the real tick.
+/// A `Transform` edited before the first step (a `place` or a drag in a
+/// scene that opened paused) then reads as unchanged: the step kept the old
+/// `Position`/`Rotation` and wrote it back over the edit (Phase S defect,
+/// `docs/upstream-watch.md`). Seeding the tick here makes the first step
+/// compare like every later one; bodies spawned before it still count as
+/// added.
+fn seed_last_physics_tick(
+    mut last: ResMut<avian2d::schedule::LastPhysicsTick>,
+    tick: bevy::ecs::system::SystemChangeTick,
+) {
+    if last.0.get() == 0 {
+        last.0 = tick.this_run();
+    }
 }
 
 fn clear_stepped_flag(mut step: ResMut<SimStep>) {
