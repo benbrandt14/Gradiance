@@ -1,5 +1,5 @@
 # Context menu quick actions
-Phase S (sandbox parity) · roadmap § "Sandbox parity" ("loosen", "centre axle", "centre thruster", "transform into circle", "brake") · status: ready
+Phase S (sandbox parity) · roadmap § "Sandbox parity" ("loosen", "centre axle", "centre thruster", "transform into circle", "brake") · status: done
 
 Written by the parity audit thread, 2026-11-20 (`docs/parity-audit.md`). Docs only.
 
@@ -44,3 +44,33 @@ New joint kinds. Gesture input.
 - fmt, clippy, tests, doc gate green; `docs/ops.md` regenerated.
 
 ## Outcome
+
+Done (2026-11-22).
+
+- **Verified first:** `OpOutput` does not batch intents into one step;
+  each intent is one command and the stack snapshots after each. So every
+  action lowers to **one** intent. Loosen needed one change:
+  `DeleteCommand` now also takes joint ids (a joint the body cascade
+  already took is not despawned twice), so `body.loosen` is one
+  `DeleteIntent` naming the body's joints.
+- **Operations** (`command::ops::quick`): `body.loosen` (`(loosen i)`),
+  `body.pin_centre` (a world-pin hinge at the body's origin),
+  `body.thruster_centre` (the thruster tool's default thruster at the
+  origin, pushing along local up), `body.to_circle` (equal area through
+  `polygonize`, centred on the origin; circles and grounds are skipped),
+  `joint.brake` (a hinge's motor on at 0 rad/s, the torque cap and damping
+  kept; a hinge with no motor gets the default motor, auto cap; sliders are
+  left alone). "Centre" is the body origin: a CSG body whose origin is off
+  its centroid is pinned at the origin.
+- `SceneSnapshot.joint_defs` (id and `JointDef`, id order) gives loosen its
+  joints and brake its old value; `joint_links` is derived from it.
+- **UI:** the context menu renders `BODY_QUICK_ACTIONS` (Loosen, Pin at
+  centre, Thruster at centre, To circle, and S-5's Make gear) and, on a
+  hinge, `HINGE_QUICK_ACTIONS` (Brake motor), as tables of operation ids
+  invoked with `"selection"` or the joint id. A unit test pins that each
+  id is registered and clickable.
+- **Tests:** the undo matrix and the doorway conformance cover all five
+  from their examples. The conformance fixture gained a box (body 5) so
+  `to-circle` has a body to change. `to_circle` keeps the area of a box
+  and a gear within 0.5 % (unit test).
+

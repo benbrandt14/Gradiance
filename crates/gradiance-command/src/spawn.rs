@@ -39,11 +39,12 @@ impl<R: AuthoredRecord> GameCommand for SpawnCommand<R> {
     }
 }
 
-/// Deletes a set of bodies (and every joint referencing them), restoring
-/// everything — same ids — on undo.
+/// Deletes a set of bodies (and every joint referencing them), nodes and
+/// joints, restoring everything — same ids — on undo. A joint target is how
+/// `body.loosen` drops every joint of a body in one step (brief S-6).
 #[derive(Debug)]
 pub struct DeleteCommand {
-    /// Bodies and/or behavior nodes to delete.
+    /// Bodies, behavior nodes and/or joints to delete.
     pub targets: Vec<StableId>,
 }
 
@@ -61,17 +62,20 @@ impl GameCommand for DeleteCommand {
         // node — a mixed selection deletes both in one undoable step.
         let mut body_pairs = Vec::new();
         let mut node_pairs = Vec::new();
+        let mut joint_targets = Vec::new();
         for &id in &self.targets {
             let entity = resolve(world, id)?;
             if let Some(record) = BodyRecord::capture(world, entity) {
                 body_pairs.push((entity, record));
             } else if let Some(record) = NodeRecord::capture(world, entity) {
                 node_pairs.push((entity, record));
+            } else if gradiance_scene::JointRecord::capture(world, entity).is_some() {
+                joint_targets.push(entity);
             } else {
                 return Err(CommandError::MissingEntity(id));
             }
         }
-        if body_pairs.is_empty() && node_pairs.is_empty() {
+        if body_pairs.is_empty() && node_pairs.is_empty() && joint_targets.is_empty() {
             return Err(CommandError::NoEffect);
         }
         // Cascade: joints referencing any deleted body go too (a joint
@@ -100,6 +104,12 @@ impl GameCommand for DeleteCommand {
         }
         for (entity, _) in joints {
             world.despawn(entity);
+        }
+        for entity in joint_targets {
+            // A joint the cascade already took is gone; despawn only once.
+            if world.get_entity(entity).is_ok() {
+                world.despawn(entity);
+            }
         }
         for (entity, _) in body_pairs {
             world.despawn(entity);

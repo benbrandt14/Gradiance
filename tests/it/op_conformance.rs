@@ -132,7 +132,7 @@ pub(crate) fn fixture() -> App {
         &mut app,
         10,
         "(begin (spawn-circle -0.4 1 0.5) (spawn-circle 0 1 0.5) (spawn-circle 0.4 1 0.5) \
-         (spawn-circle 3 1 0.5) (spawn-circle 5 1 0.5))",
+         (spawn-circle 3 1 0.5) (spawn-circle 5 1 0.5) (spawn-box 7 1 1 0.5))",
     );
     run_with_ids(&mut app, 20, "(begin (hinge 3 -1 3 1) (group (list 3 4)))");
     // A binding, so `signal.unbind`'s example has one to remove.
