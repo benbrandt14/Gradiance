@@ -966,3 +966,50 @@ fn a_box_dropped_flat_comes_to_rest_flat_at_a_low_frame_rate() {
     ));
     assert_boxes_land_flat(&mut app, 25, 25); // 5 s + 5 s at 5 fps
 }
+
+/// A `place` while paused must reach avian at once and survive the next
+/// step, for a static and a dynamic body alike (Phase S defect: in a scene
+/// that opened paused, a laser read a placed beam's old pose and one
+/// `sim-step` put the old rotation back, because avian compared the first
+/// step's changes against tick 1; `physics::seed_last_physics_tick`).
+#[test]
+fn a_paused_place_survives_a_step() {
+    use avian2d::prelude::{Position, Rotation};
+    for static_body in [true, false] {
+        let mut app = paused_app();
+        let script = |app: &mut App, source: &str| {
+            app.world_mut()
+                .resource_mut::<gradiance::script::bridge::ScriptInputs>()
+                .submit(source);
+            app.update();
+        };
+        script(&mut app, "(spawn-box 0 0 2 0.2)");
+        if static_body {
+            script(&mut app, "(set-static 0 1)");
+        }
+        step(&mut app, 3);
+        script(&mut app, "(place 0 1 0.5 0.8)");
+        step(&mut app, 2);
+        let mut bodies = app.world_mut().query_filtered::<Entity, With<StableId>>();
+        let entity = bodies.iter(app.world()).next().unwrap();
+        let rot = |app: &App| app.world().get::<Rotation>(entity).unwrap().as_radians();
+        let pos = |app: &App| app.world().get::<Position>(entity).unwrap().0;
+        assert!(
+            (rot(&app) - 0.8).abs() < 1e-3,
+            "static {static_body}: a paused place reaches avian (rot {})",
+            rot(&app)
+        );
+        script(&mut app, "(sim-step 1)");
+        step(&mut app, 3);
+        assert!(
+            (rot(&app) - 0.8).abs() < 0.05,
+            "static {static_body}: the rotation is kept after a step (rot {})",
+            rot(&app)
+        );
+        assert!(
+            pos(&app).distance(Vec2::new(1.0, 0.5)) < 0.05,
+            "static {static_body}: the position is kept after a step ({:?})",
+            pos(&app)
+        );
+    }
+}
