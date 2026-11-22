@@ -253,7 +253,8 @@ mod tests {
                 "area",
                 "inertia",
                 "potential-energy",
-                "acceleration"
+                "acceleration",
+                "hit"
             ]
         );
     }
