@@ -223,6 +223,14 @@ pub enum ToolCommit {
         /// Pitch radius (metres).
         radius: f32,
     },
+    /// Fill a rectangle with water (the water tool, brief S-11): invokes
+    /// the `water.fill` operation, one undo step.
+    Water {
+        /// Lower-left corner, world space.
+        min: Vec2,
+        /// Upper-right corner, world space.
+        max: Vec2,
+    },
     /// A script tool's gesture completed: run its body once with these
     /// points (the script tool). Not an authoring intent itself — the script
     /// run emits intents through the ordinary verbs.
@@ -484,6 +492,10 @@ impl ToolCommitWriters<'_> {
             ToolCommit::Gear { center, radius } => {
                 self.invoke
                     .write(crate::tools::gear_tool::gear_invocation(center, radius));
+            }
+            ToolCommit::Water { min, max } => {
+                self.invoke
+                    .write(crate::tools::water_tool::water_invocation(min, max));
             }
             ToolCommit::Script { tool, points } => {
                 self.script_tools

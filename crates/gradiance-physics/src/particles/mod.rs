@@ -5,8 +5,11 @@
 //!
 //! - The population is **derived**: [`ParticleFluid`] holds it, nothing
 //!   saves it, no command or undo record names it (CLAUDE.md two-tier
-//!   rule: bulk updates are derived). In this spike only code fills it
-//!   (tests, the spike scene); S-11 adds the authored emitter.
+//!   rule: bulk updates are derived). The authored half is the water
+//!   emitter (`domain::water`, a behaviour node, brief S-11): when the sim
+//!   plays, [`fill_from_emitters`] fills each emitter once; a deleted
+//!   emitter takes its particles with it, and undoing a run
+//!   (`ClearRemovals`) empties the water so the next run refills it.
 //! - One system, [`step_particle_fluid`], runs per physics step before
 //!   avian's (in `FixedUpdate`, with the other force seams), in
 //!   [`ParticleFluid::substeps`] substeps, against the bodies as the step
@@ -21,9 +24,13 @@ pub use solver::{Exchange, FluidParams, Obstacle, Particles, WallTable};
 
 use crate::lifetime::Removed;
 use avian2d::prelude::*;
+use bevy::platform::collections::HashSet;
 use bevy::prelude::*;
+use gradiance_core::ids::StableId;
 use gradiance_domain::Body;
 use gradiance_domain::fluid::Fluid;
+use gradiance_domain::lifetime::ClearRemovals;
+use gradiance_domain::node::NodeKind;
 use gradiance_domain::shape::ShapeDef;
 use gradiance_geometry::sdf;
 use std::time::Duration;
@@ -39,6 +46,10 @@ pub struct ParticleFluid {
     pub substeps: u32,
     /// The wall time the last step took (the spike's budget measure).
     pub last_step: Duration,
+    /// The emitter each particle came from (parallel to the particles).
+    owners: Vec<StableId>,
+    /// The emitters whose particles are out.
+    filled: HashSet<StableId>,
     rest_density: f32,
     walls: WallTable,
     exchange: Vec<Exchange>,
@@ -60,6 +71,8 @@ impl ParticleFluid {
         let params = FluidParams::water(spacing);
         Self {
             particles: Particles::default(),
+            owners: Vec::new(),
+            filled: HashSet::new(),
             rest_density: params.rest_density(),
             walls: WallTable::new(&params),
             params,
@@ -68,6 +81,24 @@ impl ParticleFluid {
             exchange: Vec::new(),
             total: Vec::new(),
         }
+    }
+
+    /// Adds a particle at rest at `pos`, from the emitter `owner`.
+    pub fn push(&mut self, pos: Vec2, owner: StableId) {
+        self.particles.push(pos);
+        self.owners.push(owner);
+    }
+
+    /// Empties the water (every emitter refills on the next run).
+    pub fn clear(&mut self) {
+        self.particles.clear();
+        self.owners.clear();
+        self.filled.clear();
+    }
+
+    /// The particles of the emitter `owner`.
+    pub fn count_of(&self, owner: StableId) -> usize {
+        self.owners.iter().filter(|o| **o == owner).count()
     }
 
     /// The areal mass density of water at rest, in kg/m² (the world is
@@ -80,12 +111,78 @@ impl ParticleFluid {
 /// Installs the water resource and its step.
 pub(crate) fn install(app: &mut App) {
     app.init_resource::<ParticleFluid>();
+    app.add_systems(Update, drop_stale_water);
     app.add_systems(
         FixedUpdate,
-        step_particle_fluid
+        (fill_from_emitters, step_particle_fluid)
+            .chain()
             .after(crate::buoyancy::apply_buoyancy)
             .run_if(crate::sim_running),
     );
+}
+
+/// Takes out the particles of every emitter that is gone (deleted, drained,
+/// undone), and all of them when a run is undone.
+pub fn drop_stale_water(
+    mut fluid: ResMut<ParticleFluid>,
+    mut clears: MessageReader<ClearRemovals>,
+    emitters: Query<(&StableId, &NodeKind)>,
+) {
+    if clears.read().count() > 0 {
+        if !fluid.particles.is_empty() || !fluid.filled.is_empty() {
+            fluid.clear();
+        }
+        return;
+    }
+    if fluid.filled.is_empty() {
+        return;
+    }
+    let live: HashSet<StableId> = emitters
+        .iter()
+        .filter(|(_, kind)| matches!(kind, NodeKind::Water(_)))
+        .map(|(id, _)| *id)
+        .collect();
+    if fluid.filled.iter().all(|id| live.contains(id)) {
+        return;
+    }
+    let ParticleFluid {
+        particles,
+        owners,
+        filled,
+        ..
+    } = &mut *fluid;
+    filled.retain(|id| live.contains(id));
+    // Particles a caller pushed straight into `particles` have no owner
+    // (the S-10 spike scene); only owned ones can go stale.
+    if owners.len() == particles.len() {
+        particles.retain(|i| live.contains(&owners[i]));
+        owners.retain(|id| live.contains(id));
+    }
+}
+
+/// Fills every water emitter not yet out, once, as the run plays.
+pub fn fill_from_emitters(
+    mut fluid: ResMut<ParticleFluid>,
+    emitters: Query<(&StableId, &NodeKind, &Transform)>,
+) {
+    for (id, kind, transform) in &emitters {
+        let NodeKind::Water(water) = kind else {
+            continue;
+        };
+        if fluid.filled.contains(id) {
+            continue;
+        }
+        // One water per scene: the first emitter out sets the spacing.
+        if fluid.filled.is_empty() && fluid.particles.is_empty() {
+            *fluid = ParticleFluid::water(water.spacing());
+        }
+        let at = transform.translation.truncate();
+        let spacing = fluid.params.spacing;
+        for p in gradiance_geometry::lattice::fill_polygon(&water.outline, spacing) {
+            fluid.push(at + p, *id);
+        }
+        fluid.filled.insert(*id);
+    }
 }
 
 type ObstacleQuery<'w, 's> = Query<

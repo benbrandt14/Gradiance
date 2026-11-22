@@ -393,7 +393,7 @@ pub(crate) fn prepare(gp: &mut GraphParams, bus: &SignalBus) -> GraphViewer {
         .iter()
         .filter_map(|(id, kind, _)| match kind {
             NodeKind::Laser(laser) => Some((laser.name.clone(), *id)),
-            NodeKind::Thruster(_) | NodeKind::Tracer(_) => None,
+            NodeKind::Thruster(_) | NodeKind::Tracer(_) | NodeKind::Water(_) => None,
         })
         .collect();
     let desired = collect_desired(
@@ -895,7 +895,7 @@ fn node_blocks(
                     });
                 }
             }
-            NodeKind::Tracer(_) => {}
+            NodeKind::Tracer(_) | NodeKind::Water(_) => {}
         }
     }
 }

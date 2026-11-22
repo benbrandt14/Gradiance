@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 169 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 173 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -28,6 +28,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `body.index_at` | `(body-index-at x y)` | query | — | — | Index of a body whose shape contains (x, y) (first in id order); -1 if none. | `{"x": 0, "y": 1}` |
 | `body.intersect` | `(intersect a b)` | edit | `intersect` | Context/Intersect | Keep only where bodies a and b overlap (CSG intersect) on a; b is consumed. | `{"a": 0, "b": 1}` |
 | `body.is_static` | `(body-static? i)` | query | — | — | Whether the i-th body is static (1) or not (0). | `{"i": 0}` |
+| `body.liquify` | `(liquify i)` | edit | `liquify` | Context/Liquify | Turn the i-th body into particle water of the same area (grounds and fluid regions stay): it fills when the sim plays — one undo step. | `{"i": 0}` |
 | `body.loosen` | `(loosen i)` | edit | `delete` | Context/Loosen | Drop every joint of the i-th body (the bodies stay) — one undo step. | `{"i": 3}` |
 | `body.make_gear` | `(make-gear i [teeth])` | edit | `property-edit` | Context/Make gear | Turn the i-th body, a circle, into a spur gear of the same pitch radius (teeth absent: one tooth size for every made gear, so they mesh) — undoable. | `{"i": 0, "teeth": 12}` |
 | `body.merge` | `(merge a b)` | edit | `merge` | Context/Merge into one body | Fuse bodies a and b into one CSG union; a survives. | `{"a": 0, "b": 1}` |
@@ -263,6 +264,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `tool.spring` | `(spring-tool)` | editor | — | Tools/Spring, T | Use the spring tool: drag from one anchor to the other. | `{}` |
 | `tool.thruster` | `(thruster-tool)` | editor | — | Tools/Thruster | Use the thruster tool: press on a body where it pushes; a click pushes up, a drag aims the push. | `{}` |
 | `tool.tracer` | `(tracer-tool)` | editor | — | Tools/Tracer, N | Use the tracer tool: click a body (or empty space) to place a tracer. | `{}` |
+| `tool.water` | `(water-tool)` | editor | — | Tools/Water | Use the water tool: drag out a rectangle; it fills with particle water when the sim plays. | `{}` |
 | `tool.weld` | `(weld-tool)` | editor | — | Tools/Weld, W | Use the weld tool: click two overlapping bodies to merge them. | `{}` |
 
 ## `ui`
@@ -288,6 +290,13 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `units.of` | `(unit-of unit)` | query | — | — | The SI unit symbol of what a unit measures, as quantity-unit reports it: (unit-of "km/h") is "m/s" ("" for a plain number). | `{"unit": "km/h"}` |
 | `units.shown` | `(units-shown)` | query | — | — | The units the fields show, as (angle length), e.g. ("deg" "m"). | `{}` |
 | `units.si` | `(q value unit)` | query | — | — | A number in a unit, in SI: (q 25 "cm") is 0.25, (q 90 "deg") is pi/2. A unit the parser does not read is an error. | `{"value": 25, "unit": "cm"}` |
+
+## `water`
+
+| Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
+|---|---|---|---|---|---|---|
+| `water.drain` | `(drain)` | edit | `delete` | — | Remove all particle water (every water emitter) — one undo step. | `{}` |
+| `water.fill` | `(add-water path)` | edit | `spawn-node` | — | Add particle water filling the closed outline path (x0 y0 x1 y1 …, metres, three points or more): it fills when the sim plays — undoable, saved. Returns its handle. | `{"path": [-1, 0, 1, 0, 1, 1, -1, 1]}` |
 
 ## `workspace`
 

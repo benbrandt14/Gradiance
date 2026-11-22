@@ -98,6 +98,9 @@ pub struct SceneSnapshot {
     /// The committed scene's behaviour nodes, in `StableId` order: what a
     /// delete may name besides a body.
     pub nodes: Vec<StableId>,
+    /// The water emitters among the nodes, in id order (brief S-11): what
+    /// `drain` removes.
+    pub water: Vec<StableId>,
     /// The bodies each joint connects (`None`: pinned to the world), in
     /// joint id order: what connectivity decompose walks.
     pub joint_links: Vec<(StableId, Option<StableId>)>,
@@ -251,9 +254,17 @@ pub fn snapshot_scene(world: &mut World) -> SceneSnapshot {
         .copied()
         .collect();
     nodes.sort_by_key(|id| id.0);
+    let mut water: Vec<StableId> = world
+        .query::<(&StableId, &gradiance_domain::node::NodeKind)>()
+        .iter(world)
+        .filter(|(_, kind)| matches!(kind, gradiance_domain::node::NodeKind::Water(_)))
+        .map(|(id, _)| *id)
+        .collect();
+    water.sort_by_key(|id| id.0);
     SceneSnapshot {
         joints,
         nodes,
+        water,
         bodies: rows,
         joint_links: links,
         joint_defs,

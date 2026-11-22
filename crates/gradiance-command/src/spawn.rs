@@ -39,6 +39,33 @@ impl<R: AuthoredRecord> GameCommand for SpawnCommand<R> {
     }
 }
 
+/// Turns bodies into water (brief S-11): the delete and the emitter spawns
+/// of one [`LiquifyIntent`](crate::intent::LiquifyIntent), one undo step.
+#[derive(Debug)]
+pub struct LiquifyCommand {
+    /// The bodies to delete.
+    pub targets: Vec<StableId>,
+    /// The emitters that take their place.
+    pub emitters: Vec<NodeRecord>,
+}
+
+impl GameCommand for LiquifyCommand {
+    fn apply(&mut self, world: &mut World) -> Result<(), CommandError> {
+        for record in &self.emitters {
+            record.validate()?;
+        }
+        DeleteCommand::new(self.targets.clone()).apply(world)?;
+        for record in &self.emitters {
+            record.spawn_into(world);
+        }
+        Ok(())
+    }
+
+    fn name(&self) -> &'static str {
+        crate::intent::name::LIQUIFY
+    }
+}
+
 /// Deletes a set of bodies (and every joint referencing them), nodes and
 /// joints, restoring everything — same ids — on undo. A joint target is how
 /// `body.loosen` drops every joint of a body in one step (brief S-6).

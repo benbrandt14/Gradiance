@@ -226,6 +226,11 @@ pub const BODY_QUICK_ACTIONS: &[(&str, &str, &str)] = &[
         "body.make_gear",
         "turn each selected circle into a toothed gear that meshes with other made gears",
     ),
+    (
+        "Liquify",
+        "body.liquify",
+        "turn the selected bodies into particle water of the same area",
+    ),
 ];
 
 /// One-click actions on a hinge under the click (brief S-6), as

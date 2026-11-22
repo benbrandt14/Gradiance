@@ -225,7 +225,7 @@ fn node_edits(
             match &mut kind {
                 NodeKind::Thruster(t) => t.angle = Angle(map.direction(t.angle.value())),
                 NodeKind::Laser(l) => l.angle = Angle(map.direction(l.angle.value())),
-                NodeKind::Tracer(_) => {}
+                NodeKind::Tracer(_) | NodeKind::Water(_) => {}
             }
             Some((
                 entity,

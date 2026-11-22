@@ -223,6 +223,20 @@ impl Particles {
         }
     }
 
+    /// Keeps the particles for which `keep(index)` holds, in order.
+    pub fn retain(&mut self, mut keep: impl FnMut(usize) -> bool) {
+        let mut w = 0;
+        for i in 0..self.pos.len() {
+            if keep(i) {
+                self.pos[w] = self.pos[i];
+                self.vel[w] = self.vel[i];
+                w += 1;
+            }
+        }
+        self.pos.truncate(w);
+        self.vel.truncate(w);
+    }
+
     /// Removes every particle.
     pub fn clear(&mut self) {
         self.pos.clear();

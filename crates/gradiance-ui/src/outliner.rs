@@ -93,6 +93,7 @@ fn node_label(kind: &NodeKind) -> &'static str {
         NodeKind::Tracer(_) => "tracer",
         NodeKind::Thruster(_) => "thruster",
         NodeKind::Laser(_) => "laser",
+        NodeKind::Water(_) => "water",
     }
 }
 

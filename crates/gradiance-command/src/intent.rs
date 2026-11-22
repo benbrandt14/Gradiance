@@ -82,6 +82,9 @@ pub mod name {
     /// A settled edit to the scene-content settings (gravity, render style,
     /// lighting, scenery), recorded as one undo step.
     pub const SETTINGS: &str = "settings";
+    /// [`LiquifyIntent`](super::LiquifyIntent) → `LiquifyCommand`
+    /// (brief S-11).
+    pub const LIQUIFY: &str = "liquify";
 }
 
 /// Request to spawn one fully-specified body.
@@ -106,6 +109,17 @@ pub struct SpawnNodeIntent {
 pub struct DeleteIntent {
     /// Bodies to delete.
     pub targets: Vec<StableId>,
+}
+
+/// Request to turn bodies into water (brief S-11): delete `targets` and
+/// spawn the water emitters `emitters`, as one undo step.
+// Trace: dispatch.rs → LiquifyCommand (spawn.rs) → DeleteCommand + SpawnCommand; particles fill when the run plays (physics::particles).
+#[derive(Message, Debug, Clone, Reflect)]
+pub struct LiquifyIntent {
+    /// Bodies to delete.
+    pub targets: Vec<StableId>,
+    /// The emitter nodes that take their place.
+    pub emitters: Vec<gradiance_scene::NodeRecord>,
 }
 
 /// Request to duplicate a set of bodies at an offset.

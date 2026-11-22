@@ -36,6 +36,8 @@ const TOOL_GROUPS: &[(&str, &[(ToolState, &str, &str, &str)])] = &[
             (ToolState::Sketch, "Sketch", "", "sketch"),
             // No key (brief S-5).
             (ToolState::Gear, "Gear", "", "gear"),
+            // No key, and no water icon in the set: the cloud stands in.
+            (ToolState::Water, "Water", "", "cloud"),
         ],
     ),
     (

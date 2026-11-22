@@ -79,6 +79,8 @@ tool_ops! {
         "Use the polygon tool: click the vertices, close at the start.";
     UseGear => ToolState::Gear, "tool.gear", "gear-tool", "Tools/Gear", "",
         "Use the gear tool: press at the centre, drag out the pitch radius; drawn gears mesh.";
+    UseWater => ToolState::Water, "tool.water", "water-tool", "Tools/Water", "",
+        "Use the water tool: drag out a rectangle; it fills with particle water when the sim plays.";
     UseSketch => ToolState::Sketch, "tool.sketch", "sketch-tool", "Tools/Sketch", "",
         "Use the sketch tool: draw freehand; release makes one body of the stroke.";
     UseHinge => ToolState::Hinge, "tool.hinge", "hinge-tool", "Tools/Hinge", "H",
@@ -149,6 +151,7 @@ pub fn hints(tool: ToolState) -> &'static [Hint] {
         ToolState::Box => &[("Drag", "draw a box"), ("Esc", "cancel")],
         ToolState::Circle => &[("Press", "centre"), ("Drag", "radius")],
         ToolState::Gear => &[("Press", "centre"), ("Drag", "pitch radius")],
+        ToolState::Water => &[("Drag", "water region")],
         ToolState::Polygon => &[
             ("Click", "add a vertex"),
             ("Click the start or Enter", "close"),
@@ -204,6 +207,7 @@ mod tests {
             ToolState::Sketch,
             ToolState::Laser,
             ToolState::Gear,
+            ToolState::Water,
         ];
         assert_eq!(TOOL_OPS.len(), built_in.len());
         for tool in built_in {

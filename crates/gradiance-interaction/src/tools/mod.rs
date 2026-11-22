@@ -31,6 +31,7 @@ pub mod script_tool;
 pub mod select;
 pub mod sketch_tool;
 pub mod spring_tool;
+pub mod water_tool;
 
 use context::{draw_draft_preview, draw_manip_preview, run_draft_tool, run_manip_tool};
 
@@ -71,6 +72,7 @@ impl Plugin for ToolsPlugin {
         app.init_resource::<cut_tool::CutTool>();
         app.init_resource::<circle_tool::CircleTool>();
         app.init_resource::<gear_tool::GearTool>();
+        app.init_resource::<water_tool::WaterTool>();
         app.init_resource::<ground_tool::GroundTool>();
         app.init_resource::<polygon_tool::PolygonTool>();
         app.init_resource::<spring_tool::SpringDraft>();
@@ -129,7 +131,10 @@ impl Plugin for ToolsPlugin {
                 run_draft_tool::<box_tool::BoxTool>.run_if(in_state(ToolState::Box)),
                 run_draft_tool::<cut_tool::CutTool>.run_if(in_state(ToolState::Cut)),
                 run_draft_tool::<circle_tool::CircleTool>.run_if(in_state(ToolState::Circle)),
-                run_draft_tool::<gear_tool::GearTool>.run_if(in_state(ToolState::Gear)),
+                (
+                    run_draft_tool::<gear_tool::GearTool>.run_if(in_state(ToolState::Gear)),
+                    run_draft_tool::<water_tool::WaterTool>.run_if(in_state(ToolState::Water)),
+                ),
                 run_draft_tool::<ground_tool::GroundTool>.run_if(in_state(ToolState::Ground)),
                 run_draft_tool::<polygon_tool::PolygonTool>.run_if(in_state(ToolState::Polygon)),
                 run_manip_tool::<connector_tool::ConnectorDraft>
@@ -180,6 +185,7 @@ fn add_tool_previews(app: &mut App) {
                 draw_draft_preview::<cut_tool::CutTool>.run_if(in_state(ToolState::Cut)),
                 draw_draft_preview::<circle_tool::CircleTool>.run_if(in_state(ToolState::Circle)),
                 draw_draft_preview::<gear_tool::GearTool>.run_if(in_state(ToolState::Gear)),
+                draw_draft_preview::<water_tool::WaterTool>.run_if(in_state(ToolState::Water)),
                 draw_draft_preview::<ground_tool::GroundTool>.run_if(in_state(ToolState::Ground)),
                 draw_draft_preview::<polygon_tool::PolygonTool>
                     .run_if(in_state(ToolState::Polygon)),

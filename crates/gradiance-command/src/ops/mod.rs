@@ -39,6 +39,7 @@ pub mod sets;
 pub mod sketch;
 pub mod spawn;
 pub mod units;
+pub mod water;
 
 use crate::CommandDispatchSet;
 use crate::snapshot::{BodySnapshot, SceneSnapshot, snapshot_scene};
@@ -231,6 +232,7 @@ impl Plugin for SceneOpsPlugin {
             quick::register(&mut registry);
             quantity::register(&mut registry);
             units::register(&mut registry);
+            water::register(&mut registry);
         }
         app.world_mut()
             .resource_mut::<OpContextFillers>()
@@ -277,6 +279,7 @@ mod tests {
             nodes: Vec::new(),
             joint_links: Vec::new(),
             joint_defs: Vec::new(),
+            water: Vec::new(),
             group_names: gradiance_domain::group::GroupNames::default(),
         }
     }
