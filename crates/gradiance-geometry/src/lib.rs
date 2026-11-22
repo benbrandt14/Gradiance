@@ -13,7 +13,9 @@ pub mod contour;
 pub mod contours;
 pub mod extrusion;
 pub mod face_field;
+pub mod gear;
 pub mod hull;
+pub mod partition;
 pub mod polygonize;
 pub mod profile;
 #[cfg(test)]

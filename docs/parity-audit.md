@@ -39,7 +39,7 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Thruster | present | `tool.thruster`, `thruster` (N-3) |
 | Tracer | present | `tool.tracer` (fade, size, pattern: `domain::tracer`) |
 | Laser pen | done | `tool.laser`, `laser` (N-8): reflection and hit signal; refraction and beam colour: **S-3** |
-| Gear | missing | **S-5** (gear outline as geometry, meshing by contact) |
+| Gear | done | **S-5**: `tool.gear`, `spawn-gear` (rack-generated teeth, meshing by contact) |
 | Texture | missing | **S-13** |
 | Erase | present | Delete key, `delete` |
 | Rectangle / rotate / zoom / pan (lesson era) | present | box tool, handles, camera rig |
@@ -80,7 +80,7 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Add centre axle / centre thruster | partial | tools place them by click, no one-click centre action: **S-6** |
 | Attach tracer | present | tracer tool on a body |
 | Transform into circle | missing | **S-6** |
-| Transform into gear | missing | **S-5** |
+| Transform into gear | done | **S-5**: context menu "Make gear", `make-gear` |
 | CSG | present | `merge`, `subtract`, `intersect`, `xor`, `fillet-merge` |
 | Select objects under cursor | present | context "Select from" stack |
 | Liquify | missing | **S-11** (after S-10) |

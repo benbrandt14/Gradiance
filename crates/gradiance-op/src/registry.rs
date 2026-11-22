@@ -188,7 +188,9 @@ impl OpEntry {
     /// The params a person's click can supply, or `None` when a field needs
     /// typing. Every field must name objects: a [`Target`](crate::Target)
     /// becomes `"selection"` and a list of them `["selection"]`, as the Edit
-    /// and context menus write them. An operation with no fields takes `{}`.
+    /// and context menus write them. An optional field (`Option<_>`) is left
+    /// out, so the operation picks its value (brief S-5: "Make gear" with no
+    /// tooth count). An operation with no fields takes `{}`.
     /// What F3 search can invoke (brief U-9).
     pub fn selection_params(&self) -> Option<Value> {
         let TypeInfo::Struct(info) = (self.info)() else {
@@ -199,6 +201,7 @@ impl OpEntry {
         for field in info.iter() {
             let value = match field.type_info() {
                 _ if field.type_path() == target => Value::from("selection"),
+                _ if field.type_path().starts_with("core::option::Option<") => continue,
                 Some(TypeInfo::List(list)) if list.item_ty().path() == target => {
                     Value::Array(vec![Value::from("selection")])
                 }

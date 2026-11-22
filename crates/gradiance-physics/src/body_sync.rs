@@ -22,9 +22,10 @@ fn collider_for(shape: &ShapeDef, components: &[Contours]) -> Option<Collider> {
     match shape {
         ShapeDef::Box { width, height } => Some(Collider::rectangle(*width, *height)),
         ShapeDef::Circle { radius } => Some(Collider::circle(*radius)),
-        ShapeDef::Polygon { outline, holes } => {
-            decomposition_collider(std::iter::once(outline).chain(holes.iter()))
-        }
+        // Exact first (brief S-5: an approximate decomposition filled a
+        // gear's tooth gaps); the approximate one if it does not triangulate.
+        ShapeDef::Polygon { outline, holes } => partition_collider(outline, holes)
+            .or_else(|| decomposition_collider(std::iter::once(outline).chain(holes.iter()))),
         // Exact: the segment along local x inflated by the radius.
         ShapeDef::Capsule {
             half_length,
@@ -44,6 +45,23 @@ fn collider_for(shape: &ShapeDef, components: &[Contours]) -> Option<Collider> {
             decomposition_collider(components.iter().flat_map(Contours::rings))
         }
     }
+}
+
+/// A polygon leaf's collider as its exact convex partition
+/// ([`gradiance_geometry::partition`]): one convex hull a piece, so every
+/// notch of the outline (a gear's tooth gap, a sketch's bay) collides as
+/// drawn. `None` when the outline does not triangulate.
+fn partition_collider(outline: &[Vec2], holes: &[Vec<Vec2>]) -> Option<Collider> {
+    let pieces = gradiance_geometry::partition::convex_partition(&Contours {
+        outline: outline.to_vec(),
+        holes: holes.to_vec(),
+    });
+    let hulls: Vec<(Vec2, f32, Collider)> = pieces
+        .iter()
+        .filter_map(|piece| Collider::convex_hull(piece))
+        .map(|hull| (Vec2::ZERO, 0.0, hull))
+        .collect();
+    (!hulls.is_empty()).then(|| Collider::compound(hulls))
 }
 
 /// Convex-decomposes closed rings (outline + holes) into one collider;

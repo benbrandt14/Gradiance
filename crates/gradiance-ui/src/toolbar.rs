@@ -34,6 +34,8 @@ const TOOL_GROUPS: &[(&str, &[(ToolState, &str, &str, &str)])] = &[
             (ToolState::Polygon, "Polygon", "P", "tool_polygon"),
             // No key: the editor keymap is not settled (briefs N-3, N-5, N-6).
             (ToolState::Sketch, "Sketch", "", "sketch"),
+            // No key (brief S-5).
+            (ToolState::Gear, "Gear", "", "gear"),
         ],
     ),
     (
