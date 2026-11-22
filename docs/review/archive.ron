@@ -5289,5 +5289,86 @@ Settings are global, so flip between the options rather than viewing them side b
             ),
             ingested_as: "S-12 (body.sponge)",
         ),
+        (
+            question: (
+                id: "texture-path-only",
+                title: "A body image is saved as its path",
+                source: "S-13",
+                description: r#"The save is one RON file. An image can be embedded, copied next to the scene, or saved as a path."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Path only",
+                        caption: r#"The scene saves the path. A relative path resolves against the scene file's folder. Saving does not copy the image."#,
+                    ),
+                    (
+                        label: "Copy on save",
+                        caption: r#"Saving copies each image next to the scene file: safer to move, but a save writes files the person did not ask for."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "texture-path-only",
+                title: "A body image is saved as its path",
+                choice: Picked("Path only"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-13 (BodyTexture.path, SceneFolder)",
+        ),
+        (
+            question: (
+                id: "texture-tool-scale",
+                title: "Texture tool scales by Shift-drag",
+                source: "S-13",
+                description: r#"The brief asks for wheel = scale. The wheel zooms the canvas in every tool."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Shift-drag scales",
+                        caption: r#"Shift + left-drag scales the image about its centre; the wheel keeps zooming the canvas."#,
+                    ),
+                    (
+                        label: "Wheel scales",
+                        caption: r#"The wheel scales an image under the cursor; the canvas does not zoom while the texture tool is active over an image."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "texture-tool-scale",
+                title: "Texture tool scales by Shift-drag",
+                choice: Picked("Shift-drag scales"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-13 (texture_tool)",
+        ),
+        (
+            question: (
+                id: "texture-render-check",
+                title: "No render snapshot for body images yet",
+                source: "S-13",
+                description: r#"The brief asks for a lavapipe snapshot test of a textured box. The project has snapshot tests for egui panels only, none for the 3D view."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Manual check now",
+                        caption: r#"Check the shader on lavapipe with tools/screenshot, and leave a 3D snapshot harness to its own brief."#,
+                    ),
+                    (
+                        label: "Build the harness",
+                        caption: r#"Build a headless 3D render snapshot harness inside S-13: a large change outside the brief's scope."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "texture-render-check",
+                title: "No render snapshot for body images yet",
+                choice: Picked("Manual check now"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-13 (brief Outcome)",
+        ),
     ],
 )

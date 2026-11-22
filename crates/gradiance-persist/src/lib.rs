@@ -77,6 +77,7 @@ impl Plugin for PersistPlugin {
         app.add_message::<ops::ClipboardWrite>();
         app.add_message::<SnapshotRequest>();
         app.init_resource::<LastScenePath>();
+        app.init_resource::<gradiance_core::scene_folder::SceneFolder>();
         app.init_resource::<AutosavePath>();
         // The scene-file operations (brief R-1): the menu, the keys and every
         // client save, open and dump through them.
@@ -114,6 +115,12 @@ fn write_scene_file(scene: &SceneRecord, path: &Path) -> Result<(), PersistError
     Ok(std::fs::write(path, to_ron(scene)?)?)
 }
 
+/// Points texture paths at the folder of the scene file `path` (brief S-13).
+fn set_scene_folder(world: &mut World, path: &Path) {
+    let folder = path.parent().map(Path::to_path_buf);
+    world.insert_resource(gradiance_core::scene_folder::SceneFolder(folder));
+}
+
 /// Drains persistence requests: saves capture-and-write, loads parse into
 /// [`LoadSceneIntent`] (which dispatch turns into the undoable command).
 pub fn handle_persist_requests(world: &mut World) {
@@ -132,6 +139,7 @@ pub fn handle_persist_requests(world: &mut World) {
         match write_scene_file(&scene, &path) {
             Ok(()) => {
                 info!(path = %path.display(), "scene saved");
+                set_scene_folder(world, &path);
                 world.resource_mut::<LastScenePath>().0 = Some(path);
             }
             Err(e) => warn!(path = %path.display(), error = %e, "scene save failed"),
@@ -146,6 +154,7 @@ pub fn handle_persist_requests(world: &mut World) {
             .and_then(|t| from_ron(&t))
         {
             Ok(scene) => {
+                set_scene_folder(world, &path);
                 world.resource_mut::<LastScenePath>().0 = Some(path);
                 world.write_message(LoadSceneIntent { scene });
             }

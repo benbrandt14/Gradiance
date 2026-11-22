@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 174 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 178 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -38,6 +38,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `body.nearest_dist` | `(nearest-dist x y)` | query | — | — | Distance from (x, y) to the nearest body centre; -1 if the scene is empty. | `{"x": 0, "y": 1}` |
 | `body.pin_centre` | `(pin-centre i)` | edit | `spawn-joint` | Context/Pin at centre | Hinge the i-th body to the world at its centre, so it can only spin — undoable. Returns the joint's handle. | `{"i": 0}` |
 | `body.place` | `(place i x y angle)` | edit | `commit-transform` | — | Move the i-th body to (x, y) and rotate it to `angle` radians — one undo step. | `{"i": 0, "x": 1.5, "y": 0.25, "angle": 0.5}` |
+| `body.place_texture` | `(place-texture i x y width angle)` | edit | `property-edit` | — | Place the i-th body's image: centre (x, y) in the body's frame, width metres wide, turned by angle — undoable. A body without an image is left as it is. | `{"i": 5, "x": 0.1, "y": 0, "width": 0.5, "angle": 0.3}` |
 | `body.restitution` | `(body-restitution i)` | query | — | — | Bounciness of the i-th body. | `{"i": 0}` |
 | `body.rot` | `(body-rot i)` | query | — | — | Rotation (radians) of the i-th body; NaN if out of range. | `{"i": 0}` |
 | `body.scale` | `(scale i fx fy)` | edit | `scale` | — | Resize the i-th body by (fx, fy) about its own centre, along its own axes. | `{"i": 0, "fx": 2, "fy": 1.5}` |
@@ -52,6 +53,8 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `body.set_spin` | `(set-spin i w)` | edit | `property-edit` | — | Set the spin (rad/s, counter-clockwise) the i-th body starts each run with. Applied when play starts from an edited layout, not on resume — undoable, saved. | `{"i": 0, "w": 2}` |
 | `body.set_static` | `(set-static i on)` | edit | `property-edit` | — | Make the i-th body static when `on` is non-zero, dynamic otherwise — undoable. | `{"i": 0, "on": 1}` |
 | `body.set_surface_speed` | `(set-surface-speed i v)` | edit | `property-edit` | — | Run the i-th body's surface along its outline at v m/s (positive counter-clockwise, so a positive top carries a load left; 0 stops it): a conveyor that carries what rests on it while the body stays put — undoable, saved. | `{"i": 0, "v": -1}` |
+| `body.set_texture` | `(set-texture i path)` | edit | `property-edit` | — | Show the image file path (a PNG; relative to the scene file's folder) on the i-th body's front face, as wide as the face, shaded by the look; "" removes it — undoable, saved (the path, not the image). | `{"i": 0, "path": "images/logo.png"}` |
+| `body.set_texture_mode` | `(set-texture-mode i mode)` | edit | `property-edit` | — | Shade the i-th body's image by the look ("toon") or show it unlit as it is ("raw") — undoable. A body without an image is left as it is. | `{"i": 5, "mode": "raw"}` |
 | `body.set_velocity` | `(set-velocity i vx vy)` | edit | `property-edit` | — | Set the velocity (vx, vy in m/s) the i-th body starts each run with; (0, 0) and no spin: it starts at rest. Applied when play starts from an edited layout, not on resume — undoable, saved. | `{"i": 0, "vx": 3, "vy": 0}` |
 | `body.sketch` | `(sketch path width)` | edit | `spawn-body` | — | Author one body from a freehand stroke width wide along path [x0 y0 x1 y1 …]: simplified into capsule segments joined as one union, or filled as a polygon when the stroke closes on itself. Returns its handle. | `{"path": [-1, 1, -0.5, 1.4, 0, 1, 0.5, 1.4, 1, 1], "width": 0.1}` |
 | `body.spawn_box` | `(spawn-box x y w h)` | edit | `spawn-body` | — | Author a box body of size w×h centred at (x, y), in metres; returns its handle. | `{"x": 0.5, "y": 2, "w": 1.6, "h": 1.2}` |
@@ -263,6 +266,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `tool.select` | `(select-tool)` | editor | — | Tools/Select, S | Use the select tool: click to select, drag to move, right-drag to rotate. | `{}` |
 | `tool.sketch` | `(sketch-tool)` | editor | — | Tools/Sketch | Use the sketch tool: draw freehand; release makes one body of the stroke. | `{}` |
 | `tool.spring` | `(spring-tool)` | editor | — | Tools/Spring, T | Use the spring tool: drag from one anchor to the other. | `{}` |
+| `tool.texture` | `(texture-tool)` | editor | — | Tools/Texture | Use the texture tool: drag a body's image to move it, Shift-drag to scale it, right-drag to turn it. | `{}` |
 | `tool.thruster` | `(thruster-tool)` | editor | — | Tools/Thruster | Use the thruster tool: press on a body where it pushes; a click pushes up, a drag aims the push. | `{}` |
 | `tool.tracer` | `(tracer-tool)` | editor | — | Tools/Tracer, N | Use the tracer tool: click a body (or empty space) to place a tracer. | `{}` |
 | `tool.water` | `(water-tool)` | editor | — | Tools/Water | Use the water tool: drag out a rectangle; it fills with particle water when the sim plays. | `{}` |

@@ -296,6 +296,7 @@ mod tests {
             optics: None,
             lifetime: None,
             surface: None,
+            texture: None,
         };
         let (bodies, joints) = chain_records(
             &points,

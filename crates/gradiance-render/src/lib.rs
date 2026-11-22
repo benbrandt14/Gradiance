@@ -16,6 +16,7 @@ pub mod particles_viz;
 pub mod plane;
 pub mod scenery;
 pub mod stack;
+pub mod texture_sync;
 pub mod toon;
 pub mod tracer;
 
@@ -52,6 +53,7 @@ impl Plugin for GradianceRenderPlugin {
         // register them.
         gradiance_interaction::overlay::install(app);
         toon::install(app);
+        app.init_resource::<texture_sync::TextureCache>();
         plane::install(app);
 
         app.init_resource::<GlobalAmbientLight>();
@@ -77,6 +79,7 @@ impl Plugin for GradianceRenderPlugin {
                 stack::stack_bodies.before(bevy::transform::TransformSystems::Propagate),
                 plane::sync_ground_planes,
                 toon::attach_face_fields,
+                texture_sync::attach_textures,
             ),
         );
         app.add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default());

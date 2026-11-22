@@ -154,6 +154,19 @@ fn body_strategy() -> impl Strategy<Value = BodyRecord> {
                     surface: (y < 0.0).then_some(gradiance::domain::surface::SurfaceSpeed(
                         gradiance::units::Velocity(x + 0.5),
                     )),
+                    texture: (rot > 0.0).then(|| gradiance::domain::texture::BodyTexture {
+                        offset: gradiance::units::Displacement(bevy::math::Vec2::new(y, x)),
+                        angle: gradiance::units::Angle(rot),
+                        mode: if x > 0.0 {
+                            gradiance::domain::texture::TextureMode::Raw
+                        } else {
+                            gradiance::domain::texture::TextureMode::Toon
+                        },
+                        ..gradiance::domain::texture::BodyTexture::new(
+                            "images/a.png",
+                            1.0 + y.abs(),
+                        )
+                    }),
                 }
             },
         )

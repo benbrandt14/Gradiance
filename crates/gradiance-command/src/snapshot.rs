@@ -62,6 +62,8 @@ pub struct BodySnapshot {
     pub lifetime: Option<gradiance_domain::lifetime::Lifetime>,
     /// The conveyor speed, if any (brief S-8).
     pub surface: Option<gradiance_domain::surface::SurfaceSpeed>,
+    /// The front-face image, if any (brief S-13).
+    pub texture: Option<gradiance_domain::texture::BodyTexture>,
 }
 
 impl BodySnapshot {
@@ -224,6 +226,9 @@ pub fn snapshot_scene(world: &mut World) -> SceneSnapshot {
                 surface: entity
                     .get::<gradiance_domain::surface::SurfaceSpeed>()
                     .copied(),
+                texture: entity
+                    .get::<gradiance_domain::texture::BodyTexture>()
+                    .cloned(),
             }
         })
         .collect();

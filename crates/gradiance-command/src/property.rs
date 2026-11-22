@@ -39,6 +39,8 @@ pub enum PropertyValue {
     Lifetime(Option<gradiance_domain::lifetime::Lifetime>),
     /// The conveyor speed (brief S-8); none or zero: a still surface.
     SurfaceSpeed(Option<gradiance_domain::surface::SurfaceSpeed>),
+    /// The front-face image (brief S-13); none: no image.
+    Texture(Option<gradiance_domain::texture::BodyTexture>),
     /// Initial velocity and spin (`None` = starts at rest; brief S-1).
     InitialMotion(Option<gradiance_domain::motion::InitialMotion>),
     /// Trajectory-trail marker (`None` = no tracer).
@@ -118,6 +120,12 @@ impl PropertyValue {
             Self::SurfaceSpeed(surface) => set_optional(
                 &mut entity_mut,
                 surface.and_then(gradiance_domain::surface::SurfaceSpeed::sanitized),
+            ),
+            Self::Texture(texture) => set_optional(
+                &mut entity_mut,
+                texture
+                    .clone()
+                    .and_then(gradiance_domain::texture::BodyTexture::sanitized),
             ),
             // A motion at rest is no motion: the record stays empty.
             Self::InitialMotion(motion) => {

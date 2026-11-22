@@ -31,6 +31,7 @@ pub mod script_tool;
 pub mod select;
 pub mod sketch_tool;
 pub mod spring_tool;
+pub mod texture_tool;
 pub mod water_tool;
 
 use context::{draw_draft_preview, draw_manip_preview, run_draft_tool, run_manip_tool};
@@ -82,6 +83,7 @@ impl Plugin for ToolsPlugin {
         app.init_resource::<node_tools::TracerTool>();
         app.init_resource::<node_tools::ThrusterTool>();
         app.init_resource::<node_tools::LaserTool>();
+        app.init_resource::<texture_tool::TextureTool>();
         app.init_resource::<script_tool::ScriptTool>();
         app.init_resource::<gradiance_core::script_tools::ScriptTools>();
         app.add_message::<gradiance_core::script_tools::ScriptToolFired>();
@@ -145,7 +147,11 @@ impl Plugin for ToolsPlugin {
                 run_manip_tool::<sketch_tool::SketchDraft>.run_if(in_state(ToolState::Sketch)),
                 run_manip_tool::<node_tools::TracerTool>.run_if(in_state(ToolState::Tracer)),
                 run_manip_tool::<node_tools::ThrusterTool>.run_if(in_state(ToolState::Thruster)),
-                run_manip_tool::<node_tools::LaserTool>.run_if(in_state(ToolState::Laser)),
+                (
+                    run_manip_tool::<node_tools::LaserTool>.run_if(in_state(ToolState::Laser)),
+                    run_manip_tool::<texture_tool::TextureTool>
+                        .run_if(in_state(ToolState::Texture)),
+                ),
                 // Script tools: a generic draft over the table the script
                 // layer publishes. The VM runs once, after the last point.
                 (
@@ -196,8 +202,12 @@ fn add_tool_previews(app: &mut App) {
                 draw_manip_preview::<chain_tool::ChainDraft>.run_if(in_state(ToolState::Chain)),
                 draw_manip_preview::<sketch_tool::SketchDraft>.run_if(in_state(ToolState::Sketch)),
                 draw_manip_preview::<node_tools::TracerTool>.run_if(in_state(ToolState::Tracer)),
-                draw_manip_preview::<node_tools::ThrusterTool>
-                    .run_if(in_state(ToolState::Thruster)),
+                (
+                    draw_manip_preview::<node_tools::ThrusterTool>
+                        .run_if(in_state(ToolState::Thruster)),
+                    draw_manip_preview::<texture_tool::TextureTool>
+                        .run_if(in_state(ToolState::Texture)),
+                ),
                 draw_draft_preview::<script_tool::ScriptTool>
                     .run_if(script_tool::script_tool_active),
             ),
@@ -267,5 +277,6 @@ pub fn new_body_record(shape: ShapeDef, pos: Vec2, rot: f32) -> gradiance_scene:
         optics: None,
         lifetime: None,
         surface: None,
+        texture: None,
     }
 }

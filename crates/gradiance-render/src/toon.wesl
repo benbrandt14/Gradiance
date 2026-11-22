@@ -44,6 +44,13 @@ struct ToonRamp {
 // fraction of the deepest. Laid over the face coordinates.
 @group(constants::MATERIAL_BIND_GROUP) @binding(103) var field_texture: texture_2d<f32>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(104) var field_sampler: sampler;
+// The body's image (brief S-13): rows of the affine map from the face
+// coordinates to the image's [0, 1]² (v down). image_u.w = 1 when bound,
+// image_v.w = 1 for a raw (unlit) image.
+@group(constants::MATERIAL_BIND_GROUP) @binding(105) var<uniform> image_u: vec4<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(106) var<uniform> image_v: vec4<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(107) var image_texture: texture_2d<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(108) var image_sampler: sampler;
 
 // The world directions of the face's local +x and +y (unit), from screen
 // derivatives of the face coordinate `uv` (`geometry::extrusion::face_coords`:
@@ -127,6 +134,23 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         axes = face_axes(in.world_position.xyz, uv, flat_n);
     }
     let field = textureSampleLevel(field_texture, field_sampler, uv * 0.5 + 0.5, 0.0);
+
+    // The image (brief S-13), on the front cap only, inside its rectangle.
+    // A toon image is the face's albedo, so the ramp shades it; a raw one
+    // goes over the lit result below.
+    var raw_image = vec4(0.0);
+    if image_u.w > 0.5 && flat_n.z > 0.99 {
+        let iuv = vec2(dot(image_u.xy, uv) + image_u.z, dot(image_v.xy, uv) + image_v.z);
+        if all(iuv >= vec2(0.0)) && all(iuv <= vec2(1.0)) {
+            let c = textureSampleLevel(image_texture, image_sampler, iuv, 0.0);
+            if image_v.w > 0.5 {
+                raw_image = c;
+            } else {
+                let b = pbr_input.material.base_color;
+                pbr_input.material.base_color = vec4(mix(b.rgb, c.rgb, c.a), b.a);
+            }
+        }
+    }
     let toon_on = toon.data.x > 0.5;
     let relief = face.data.x;
     if toon_on && relief > 0.0 && dot(axes.t, axes.t) > 0.5 {
@@ -204,6 +228,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         out.color = vec4(toned + base * rim + glint * toon.data.w + glow, out.color.a);
     }
 
+    out.color = vec4(mix(out.color.rgb, raw_image.rgb, raw_image.a), out.color.a);
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);
     return out;
 }
