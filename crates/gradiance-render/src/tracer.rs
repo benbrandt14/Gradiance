@@ -296,7 +296,10 @@ pub fn draw_node_glyphs(
                     .iter()
                     .chain(water.outline.first())
                     .map(|v| p + *v);
-                gizmos.linestrip_2d(ring, Color::srgba(0.25, 0.55, 0.95, 0.6));
+                gizmos.linestrip_2d(
+                    ring,
+                    Color::from(gradiance_domain::theme::PARTICLE_WATER.with_alpha(0.6)),
+                );
             }
             NodeKind::Laser(laser) => {
                 let axis = Vec2::from_angle(body.map_or(0.0, |b| b.rot) + laser.angle.0);
