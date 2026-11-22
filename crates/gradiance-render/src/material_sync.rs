@@ -20,8 +20,9 @@ pub fn color_of(rgba: Rgba) -> Color {
     rgba.into()
 }
 
-/// How opaque a fluid region draws (brief N-7): translucent, so what
-/// floats or sinks in it stays visible.
+/// How opaque a fluid region draws in the default look (brief N-7):
+/// translucent, so what floats or sinks in it stays visible. Each
+/// [`FluidLook`](gradiance_domain::settings::FluidLook) has its own.
 pub const FLUID_OPACITY: f32 = 0.45;
 
 /// The standard body material: matte base, toon banding per settings. A
@@ -48,7 +49,7 @@ fn body_material(
     let (fill, alpha_mode) = if fluid {
         (
             Rgba {
-                a: fill.a * FLUID_OPACITY,
+                a: fill.a * settings.fluid_look.opacity(),
                 ..fill
             },
             AlphaMode::Blend,
@@ -97,12 +98,44 @@ fn body_material(
     }
 }
 
+/// A fluid's material in an unshaded [`FluidLook`]: an even, unlit tint of
+/// the fill (darkened toward [`FLUID_DEPTH_TONE`] by the look's depth
+/// shade) at the look's opacity. No toon bands, no relief: water is not a
+/// solid body.
+///
+/// [`FluidLook`]: gradiance_domain::settings::FluidLook
+/// [`FLUID_DEPTH_TONE`]: gradiance_domain::theme::FLUID_DEPTH_TONE
+fn water_material(fill: Rgba, settings: &RenderSettings) -> StandardMaterial {
+    let look = settings.fluid_look;
+    let tinted = fill.lerp(
+        gradiance_domain::theme::FLUID_DEPTH_TONE,
+        look.depth_shade(),
+    );
+    StandardMaterial {
+        base_color: color_of(Rgba {
+            a: fill.a * look.opacity(),
+            ..tinted
+        }),
+        alpha_mode: AlphaMode::Blend,
+        unlit: true,
+        double_sided: true,
+        cull_mode: None,
+        ..default()
+    }
+}
+
 /// (Re)builds a body's material when its appearance, signal tint or fluid
 /// flag changes (or the tint or the fluid is removed — the authored fill
-/// returns).
+/// returns), and every fluid's when the fluid look changes.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the sync's queries and both material stores"
+)]
 pub fn sync_body_materials(
     mut commands: Commands,
     mut materials: ResMut<Assets<ToonMaterial>>,
+    mut water: ResMut<Assets<StandardMaterial>>,
+    mut shown_fluid_look: Local<Option<gradiance_domain::settings::FluidLook>>,
     settings: Res<RenderSettings>,
     changed: Query<
         (
@@ -140,8 +173,17 @@ pub fn sync_body_materials(
     let relook = *shown_look != Some(settings.look);
     *shown_look = Some(settings.look);
     let theme = settings.look.theme();
+    // A new fluid look rebuilds the fluids (and only them).
+    let refluid = *shown_fluid_look != Some(settings.fluid_look);
+    *shown_fluid_look = Some(settings.fluid_look);
     let all: Vec<Entity> = if relook {
         bodies.iter().map(|(e, ..)| e).collect()
+    } else if refluid {
+        bodies
+            .iter()
+            .filter(|(.., fluid)| *fluid)
+            .map(|(e, ..)| e)
+            .collect()
     } else {
         Vec::new()
     };
@@ -155,6 +197,26 @@ pub fn sync_body_materials(
         if matches!(shape, gradiance_domain::shape::ShapeDef::HalfPlane) {
             continue;
         }
+        if fluid && !settings.fluid_look.shaded() {
+            let fill = tint.and_then(|t| t.fill).map_or_else(
+                || theme.display(appearance.fill),
+                |c| {
+                    let c = c.to_srgba();
+                    Rgba {
+                        r: c.red,
+                        g: c.green,
+                        b: c.blue,
+                        a: c.alpha,
+                    }
+                },
+            );
+            let handle = water.add(water_material(fill, &settings));
+            commands
+                .entity(entity)
+                .remove::<MeshMaterial3d<ToonMaterial>>()
+                .insert(MeshMaterial3d(handle));
+            continue;
+        }
         let handle = materials.add(body_material(
             appearance,
             tint.and_then(|t| t.fill),
@@ -162,6 +224,9 @@ pub fn sync_body_materials(
             &settings,
             theme,
         ));
-        commands.entity(entity).insert(MeshMaterial3d(handle));
+        commands
+            .entity(entity)
+            .remove::<MeshMaterial3d<StandardMaterial>>()
+            .insert(MeshMaterial3d(handle));
     }
 }

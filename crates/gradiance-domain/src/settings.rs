@@ -522,6 +522,77 @@ pub struct RenderSettings {
     /// into a dome, smaller keeps a flat middle and rounds the edges.
     #[serde(default = "default_bevel")]
     pub bevel: f32,
+    /// How fluid regions draw (`domain::fluid`, briefs N-7, Q-5): the
+    /// body's own shading, or a water look of their own.
+    #[serde(default)]
+    pub fluid_look: FluidLook,
+}
+
+/// How a fluid region draws. A fluid is drawn as water rather than as a
+/// body: every look except [`Shaded`](Self::Shaded) drops the toon bands,
+/// relief and outline a solid body has, and keeps the water surface line.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, bevy::reflect::Reflect,
+)]
+pub enum FluidLook {
+    /// The body's own toon shading, relief and outline, translucent (the
+    /// look Q-5 shipped).
+    Shaded,
+    /// An even, unlit tint of the fill, half see-through; no outline. The
+    /// default (owner's pick, review question `water-look`, 2026-11-22).
+    #[default]
+    Flat,
+    /// A light, clear tint (mostly see-through); no outline.
+    Clear,
+    /// A deeper, darker tint that hides more of what is under it; no
+    /// outline.
+    Deep,
+    /// A faint tint with the outline kept: the water reads by its edges.
+    Outline,
+}
+
+impl FluidLook {
+    /// Every look, in menu order.
+    pub const ALL: [Self; 5] = [
+        Self::Shaded,
+        Self::Flat,
+        Self::Clear,
+        Self::Deep,
+        Self::Outline,
+    ];
+
+    /// How opaque the fill draws (0 to 1).
+    #[must_use]
+    pub const fn opacity(self) -> f32 {
+        match self {
+            Self::Shaded | Self::Flat => 0.45,
+            Self::Clear => 0.22,
+            Self::Deep => 0.68,
+            Self::Outline => 0.12,
+        }
+    }
+
+    /// Whether the fill is shaded like a body (toon bands and relief)
+    /// rather than an even tint.
+    #[must_use]
+    pub const fn shaded(self) -> bool {
+        matches!(self, Self::Shaded)
+    }
+
+    /// Whether the body's outline is drawn.
+    #[must_use]
+    pub const fn outline(self) -> bool {
+        matches!(self, Self::Shaded | Self::Outline)
+    }
+
+    /// How far the fill is darkened toward the deep-water tone (0 = none).
+    #[must_use]
+    pub const fn depth_shade(self) -> f32 {
+        match self {
+            Self::Deep => 0.4,
+            Self::Shaded | Self::Flat | Self::Clear | Self::Outline => 0.0,
+        }
+    }
 }
 
 fn default_white_point() -> f32 {
