@@ -60,6 +60,7 @@ pub struct BodyProps<'w, 's> {
     tracer_q: Query<'w, 's, &'static gradiance_domain::tracer::Tracer, With<Body>>,
     fluid_q: Query<'w, 's, &'static gradiance_domain::fluid::Fluid, With<Body>>,
     motion_q: Query<'w, 's, &'static gradiance_domain::motion::InitialMotion, With<Body>>,
+    optics_q: Query<'w, 's, &'static gradiance_domain::optics::Optics, With<Body>>,
     friction_q: Query<'w, 's, &'static Friction, With<Body>>,
     restitution_q: Query<'w, 's, &'static Restitution, With<Body>>,
     density_q: Query<'w, 's, &'static ColliderDensity, With<Body>>,
@@ -338,8 +339,67 @@ pub fn physics_section(ui: &mut egui::Ui, selection: &Selection, props: &mut Bod
     }
     field_block(ui, selection, props, primary);
     fluid_block(ui, selection, props, primary);
+    optics_block(ui, selection, props, primary);
     tracer_block(ui, selection, props, primary);
     motion_block(ui, selection, props, primary);
+}
+
+/// The optics editor (brief S-3): a toggle that lets laser beams through
+/// the body, and its refractive index. One undo step per gesture.
+fn optics_block(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProps, primary: Entity) {
+    use gradiance_domain::optics::{DEFAULT_INDEX, MAX_INDEX, MIN_INDEX, Optics};
+    let current = props.optics_q.get(primary).ok().copied();
+    let mut on = current.is_some();
+    if ui
+        .checkbox(&mut on, "transparent (refracts beams)")
+        .on_hover_text("laser beams pass through, bent by its refractive index; off: a mirror")
+        .changed()
+    {
+        let new = on.then(|| current.unwrap_or_default());
+        commit_optics(selection, props, new);
+    }
+    let Some(optics) = current else {
+        return;
+    };
+    let mut index = optics.index;
+    ui.horizontal(|ui| {
+        ui.label("refractive index")
+            .on_hover_text("1.33 water, 1.5 glass, 2.42 diamond");
+        if let Commit::Done(_, new) = precise_drag_clamped(
+            ui,
+            ui.id().with("optics-index"),
+            &mut index,
+            DEFAULT_INDEX,
+            0.005,
+            MIN_INDEX..=MAX_INDEX,
+            Dimension::Dimensionless,
+        ) {
+            commit_optics(selection, props, Some(Optics { index: new }.sanitized()));
+        }
+    });
+}
+
+/// Commits one optics edit to every selected body.
+fn commit_optics(
+    selection: &Selection,
+    props: &mut BodyProps,
+    new: Option<gradiance_domain::optics::Optics>,
+) {
+    let changes: Vec<PropertyChange> = selection
+        .iter()
+        .filter_map(|e| {
+            let id = props.ids.get(e).ok().copied()?;
+            let old = props.optics_q.get(e).ok().copied();
+            (old != new).then_some(PropertyChange {
+                id,
+                old: PropertyValue::Optics(old),
+                new: PropertyValue::Optics(new),
+            })
+        })
+        .collect();
+    if !changes.is_empty() {
+        props.edits.write(PropertyEditIntent { changes });
+    }
 }
 
 /// The starting-motion editor (brief S-1): a direction dial and the speed,

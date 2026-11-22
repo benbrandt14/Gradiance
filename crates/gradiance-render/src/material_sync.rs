@@ -11,6 +11,7 @@ use bevy::prelude::*;
 use gradiance_domain::Body;
 use gradiance_domain::appearance::{Appearance, Rgba};
 use gradiance_domain::fluid::Fluid;
+use gradiance_domain::optics::Optics;
 use gradiance_domain::settings::RenderSettings;
 use gradiance_domain::theme::{Look, SceneTheme};
 use gradiance_signal::SignalColorOverride;
@@ -25,12 +26,16 @@ pub fn color_of(rgba: Rgba) -> Color {
 /// [`FluidLook`](gradiance_domain::settings::FluidLook) has its own.
 pub const FLUID_OPACITY: f32 = 0.45;
 
+/// How opaque a transparent body (one with a refractive index, brief S-3)
+/// draws: shaded like a body, but see-through, so the beam inside shows.
+pub const GLASS_OPACITY: f32 = 0.55;
+
 /// The standard body material: matte base, toon banding per settings. A
 /// fluid region blends at [`FLUID_OPACITY`].
 fn body_material(
     appearance: &Appearance,
     tint: Option<Color>,
-    fluid: bool,
+    translucency: Option<f32>,
     settings: &RenderSettings,
     theme: &SceneTheme,
 ) -> ToonMaterial {
@@ -46,16 +51,15 @@ fn body_material(
         }
         None => theme.display(appearance.fill),
     };
-    let (fill, alpha_mode) = if fluid {
-        (
+    let (fill, alpha_mode) = match translucency {
+        Some(opacity) => (
             Rgba {
-                a: fill.a * settings.fluid_look.opacity(),
+                a: fill.a * opacity,
                 ..fill
             },
             AlphaMode::Blend,
-        )
-    } else {
-        (fill, AlphaMode::Opaque)
+        ),
+        None => (fill, AlphaMode::Opaque),
     };
     ToonMaterial {
         base: StandardMaterial {
@@ -144,6 +148,7 @@ pub fn sync_body_materials(
             Option<&SignalColorOverride>,
             &gradiance_domain::shape::ShapeDef,
             Has<Fluid>,
+            Has<Optics>,
         ),
         (
             With<Body>,
@@ -151,6 +156,7 @@ pub fn sync_body_materials(
                 Changed<Appearance>,
                 Changed<SignalColorOverride>,
                 Changed<Fluid>,
+                Changed<Optics>,
             )>,
         ),
     >,
@@ -161,14 +167,20 @@ pub fn sync_body_materials(
             Option<&SignalColorOverride>,
             &gradiance_domain::shape::ShapeDef,
             Has<Fluid>,
+            Has<Optics>,
         ),
         With<Body>,
     >,
     mut untinted: RemovedComponents<SignalColorOverride>,
     mut drained: RemovedComponents<Fluid>,
+    mut cleared: RemovedComponents<Optics>,
     mut shown_look: Local<Option<Look>>,
 ) {
-    let removed: Vec<Entity> = untinted.read().chain(drained.read()).collect();
+    let removed: Vec<Entity> = untinted
+        .read()
+        .chain(drained.read())
+        .chain(cleared.read())
+        .collect();
     // A new look re-tones every body: rebuild them all, once.
     let relook = *shown_look != Some(settings.look);
     *shown_look = Some(settings.look);
@@ -181,13 +193,13 @@ pub fn sync_body_materials(
     } else if refluid {
         bodies
             .iter()
-            .filter(|(.., fluid)| *fluid)
+            .filter(|(.., fluid, _)| *fluid)
             .map(|(e, ..)| e)
             .collect()
     } else {
         Vec::new()
     };
-    for (entity, appearance, tint, shape, fluid) in changed.iter().chain(
+    for (entity, appearance, tint, shape, fluid, glass) in changed.iter().chain(
         removed
             .iter()
             .chain(&all)
@@ -217,10 +229,17 @@ pub fn sync_body_materials(
                 .insert(MeshMaterial3d(handle));
             continue;
         }
+        let translucency = if fluid {
+            Some(settings.fluid_look.opacity())
+        } else if glass {
+            Some(GLASS_OPACITY)
+        } else {
+            None
+        };
         let handle = materials.add(body_material(
             appearance,
             tint.and_then(|t| t.fill),
-            fluid,
+            translucency,
             &settings,
             theme,
         ));

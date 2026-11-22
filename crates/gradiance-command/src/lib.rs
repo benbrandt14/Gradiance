@@ -534,6 +534,7 @@ impl Plugin for CommandPlugin {
         app.register_type::<gradiance_domain::fluid::Fluid>();
         app.register_type::<gradiance_domain::tracer::Tracer>();
         app.register_type::<gradiance_domain::motion::InitialMotion>();
+        app.register_type::<gradiance_domain::optics::Optics>();
         app.add_systems(
             Update,
             dispatch::dispatch_intents.in_set(CommandDispatchSet),

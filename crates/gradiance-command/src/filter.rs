@@ -246,6 +246,7 @@ mod tests {
             groups,
             fluid: None,
             motion: None,
+            optics: None,
         }
     }
 

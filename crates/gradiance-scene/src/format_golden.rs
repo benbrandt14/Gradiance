@@ -67,6 +67,7 @@ fn body(n: u8, depth: DepthBand) -> BodyRecord {
         tracer: None,
         fluid: None,
         motion: None,
+        optics: None,
     }
 }
 
@@ -92,6 +93,10 @@ fn joint(n: u8, kind: JointKind) -> JointRecord {
 
 /// A scene with every quantity-bearing authored field set to a distinctive,
 /// non-default value.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one literal scene that names every saved field"
+)]
 pub(crate) fn every_quantity_scene() -> SceneRecord {
     let mut field_body = body(1, DepthBand::metres(0.75, 3.5));
     field_body.field = Some(FieldSource {
@@ -194,6 +199,7 @@ pub(crate) fn every_quantity_scene() -> SceneRecord {
                     angle: q("-0.75"),
                     range: q("12.5"),
                     bounces: 3,
+                    color: None,
                 }),
                 appearance: Appearance::default(),
             },

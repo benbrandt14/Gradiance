@@ -524,6 +524,7 @@ mod tests {
             tracer: None,
             fluid: None,
             motion: None,
+            optics: None,
         }
     }
 

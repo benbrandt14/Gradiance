@@ -292,7 +292,12 @@ pub fn draw_node_glyphs(
                 let axis = Vec2::from_angle(body.map_or(0.0, |b| b.rot) + laser.angle.0);
                 gizmos.line_2d(p + axis * r, p + axis * (r + 6.0 * s), base);
                 if let Some(beam) = beam {
-                    let ray = Color::from(theme.ink.danger.with_alpha(0.85));
+                    let ray = Color::from(
+                        laser
+                            .color
+                            .map_or(theme.ink.danger, |c| theme.display(c))
+                            .with_alpha(0.85),
+                    );
                     gizmos.linestrip_2d(beam.path.iter().copied(), ray);
                     if beam.hit
                         && let Some(end) = beam.path.last()

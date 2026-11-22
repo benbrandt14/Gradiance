@@ -38,7 +38,7 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Chain / rope | present | `tool.chain`, `chain` (N-5) |
 | Thruster | present | `tool.thruster`, `thruster` (N-3) |
 | Tracer | present | `tool.tracer` (fade, size, pattern: `domain::tracer`) |
-| Laser pen | partial | `tool.laser`, `laser` (N-8): reflection and hit signal. No refraction, no beam colour: **S-3** |
+| Laser pen | done | `tool.laser`, `laser` (N-8): reflection and hit signal; refraction and beam colour: **S-3** |
 | Gear | missing | **S-5** (gear outline as geometry, meshing by contact) |
 | Texture | missing | **S-13** |
 | Erase | present | Delete key, `delete` |
@@ -90,7 +90,7 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Geometry from image | missing | **S-14** |
 | Material: density, friction, restitution | present | inspector, `set-density`, `set-friction`, `set-restitution` |
 | Material: mass entry | partial | density only; mass is derived (the field was in the rejected presets brief) |
-| Material: refractive index | missing | **S-3** |
+| Material: refractive index | done | **S-3** (`Optics`, `set-index`, inspector) |
 | Material: attraction | present | `FieldSource` (`domain::field`, M20) |
 | Material: surface velocity (conveyor) | missing | **S-8** |
 | Material presets (wood, glass, …) | rejected | owner, 2026-11-21 |
