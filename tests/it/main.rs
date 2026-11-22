@@ -51,6 +51,7 @@ mod new_scene;
 mod nodes;
 mod op_conformance;
 mod packing;
+mod particle_water;
 mod persistence;
 mod phase_plot;
 mod physics_sync;

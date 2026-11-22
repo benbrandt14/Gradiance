@@ -23,6 +23,7 @@ pub mod joint_sync;
 pub mod laser;
 pub mod lifetime;
 pub mod motor;
+pub mod particles;
 pub mod queries;
 pub mod surface;
 pub mod thrust;
@@ -116,6 +117,7 @@ impl Plugin for GradiancePhysicsPlugin {
         app.add_systems(PostStartup, seed_last_physics_tick);
         lifetime::install(app);
         surface::install(app);
+        particles::install(app);
         app.add_systems(FixedFirst, advance_owed_step);
         app.add_systems(
             Update,

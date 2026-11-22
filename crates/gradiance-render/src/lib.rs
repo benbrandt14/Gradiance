@@ -12,6 +12,7 @@ pub mod extrude_sync;
 pub mod grid;
 pub mod joint_viz;
 pub mod material_sync;
+pub mod particles_viz;
 pub mod plane;
 pub mod scenery;
 pub mod stack;
@@ -95,6 +96,7 @@ impl Plugin for GradianceRenderPlugin {
                 debug_viz::draw_debug_overlays,
                 tracer::draw_traces,
                 tracer::draw_node_glyphs,
+                particles_viz::draw_particles,
             ),
         );
         app.add_systems(

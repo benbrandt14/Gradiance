@@ -5154,5 +5154,59 @@ Settings are global, so flip between the options rather than viewing them side b
             ),
             ingested_as: "domain::surface",
         ),
+        (
+            question: (
+                id: "particle-fluid-gate",
+                title: "How is the particle-water spike gated?",
+                source: "S-10",
+                description: r#"The brief asks for the spike behind a feature flag; CI builds only the default features."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Runtime gate",
+                        caption: r#"The step returns at once with no particles, and only code fills them, so CI runs the behaviour test."#,
+                    ),
+                    (
+                        label: "Cargo feature",
+                        caption: r#"The spike compiles only with a feature; CI would never build or test it."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "particle-fluid-gate",
+                title: "How is the particle-water spike gated?",
+                choice: Picked("Runtime gate"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "physics::particles",
+        ),
+        (
+            question: (
+                id: "particle-fluid-coupling",
+                title: "How do particles and bodies push each other?",
+                source: "S-10",
+                description: r#"avian has no particle API; the brief names two candidates."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Separate solver",
+                        caption: r#"Particles read bodies as SDFs and pay them equal and opposite impulses through Forces."#,
+                    ),
+                    (
+                        label: "Small avian bodies",
+                        caption: r#"2000 rigid bodies in the body solver, with no fluid pressure."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "particle-fluid-coupling",
+                title: "How do particles and bodies push each other?",
+                choice: Picked("Separate solver"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "docs/particle-fluid-decision.md",
+        ),
     ],
 )
