@@ -777,7 +777,7 @@ Each gap below reuses an existing seam; one brief each, in this order:
    (derived for the run, undone with it) — done.
 8. **S-8** surface velocity (conveyor) — done (avian 0.8 has the
    contact tangent speed).
-9. **S-9** camera follow, frame selection, camera verbs.
+9. **S-9** camera follow, frame selection, camera verbs — done.
 
 Added 2026-11-21 (owner: "include the others"):
 

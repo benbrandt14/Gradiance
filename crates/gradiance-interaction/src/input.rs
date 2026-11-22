@@ -50,6 +50,8 @@ pub enum EditorAction {
     Copy,
     /// Paste scene text from the clipboard at the cursor (Ctrl+V; brief R-3).
     Paste,
+    /// Glide the camera to show the selection (`.`; brief S-9).
+    FrameSelection,
     /// Switch to the given tool (see `default_input_map` for the keys).
     /// Carrying the [`ToolState`] directly means a new tool adds one key
     /// binding — no parallel variant, match arm, or tool list to update.
@@ -92,6 +94,7 @@ fn default_input_map() -> InputMap<EditorAction> {
     );
     map.insert(A::Copy, ModifierKey::Control.with(KeyCode::KeyC));
     map.insert(A::Paste, ModifierKey::Control.with(KeyCode::KeyV));
+    map.insert(A::FrameSelection, KeyCode::Period);
     map.insert(A::Tool(ToolState::Select), KeyCode::KeyS);
     map.insert(A::Tool(ToolState::Drag), KeyCode::KeyD);
     map.insert(A::Tool(ToolState::Box), KeyCode::KeyB);
@@ -193,6 +196,11 @@ pub const KEY_OPS: &[KeyOp] = &[
     KeyOp {
         action: EditorAction::Copy,
         id: "edit.copy",
+        params: || json!({"targets": ["selection"]}),
+    },
+    KeyOp {
+        action: EditorAction::FrameSelection,
+        id: "camera.frame",
         params: || json!({"targets": ["selection"]}),
     },
 ];

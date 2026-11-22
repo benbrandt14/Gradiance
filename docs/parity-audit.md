@@ -142,7 +142,7 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Time to live | done | **S-7**: `set-lifetime`, inspector "remove after" |
 | Entity by id | present | verbs take an index or a `StableId` |
 | Sim time, running | present | `sim-time` |
-| Camera zoom / pan from script | missing | **S-9** |
+| Camera zoom / pan from script | done | **S-9**: `camera-look x y zoom` |
 | Mouse position | partial | `action-x`, `action-y`, tool points |
 | File write | present | `save-scene`, `signal-export` |
 | Random numbers | *unverified* | Steel built-ins not checked |
@@ -152,8 +152,8 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Feature | Status | Where in Gradiance |
 |---|---|---|
 | Zoom, pan | present | camera rig, `camera-set` (feel only) |
-| Follow a body | missing | **S-9** |
-| Zoom to fit / to selection | missing | **S-9** |
+| Follow a body | done | **S-9**: `camera-follow`, View > Follow selection |
+| Zoom to fit / to selection | done | **S-9**: `camera-frame`, View > Frame selection (`.`) and Frame all |
 
 ## Rejected or declined
 

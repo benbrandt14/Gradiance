@@ -968,24 +968,10 @@ fn depth_edit(
     }
 }
 
-/// A body's conservative world-space AABB.
+/// A body's conservative world-space AABB (`geometry::sdf::world_aabb`).
 fn world_bounds(shape: &ShapeDef, transform: &Transform) -> (Vec2, Vec2) {
-    let (min, max) = gradiance_geometry::sdf::aabb(shape);
-    let affine = transform.compute_affine();
-    let corners = [
-        Vec2::new(min.x, min.y),
-        Vec2::new(max.x, min.y),
-        Vec2::new(max.x, max.y),
-        Vec2::new(min.x, max.y),
-    ];
-    let mut wmin = Vec2::splat(f32::MAX);
-    let mut wmax = Vec2::splat(f32::MIN);
-    for corner in corners {
-        let w = affine.transform_point3(corner.extend(0.0)).truncate();
-        wmin = wmin.min(w);
-        wmax = wmax.max(w);
-    }
-    (wmin, wmax)
+    let rot = transform.rotation.to_euler(EulerRot::XYZ).2;
+    gradiance_geometry::sdf::world_aabb(shape, transform.translation.truncate(), rot)
 }
 
 #[cfg(test)]
