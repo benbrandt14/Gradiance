@@ -537,9 +537,10 @@ pub struct RenderSettings {
 pub enum FluidLook {
     /// The body's own toon shading, relief and outline, translucent (the
     /// look Q-5 shipped).
-    #[default]
     Shaded,
-    /// An even, unlit tint of the fill, half see-through; no outline.
+    /// An even, unlit tint of the fill, half see-through; no outline. The
+    /// default (owner's pick, review question `water-look`, 2026-11-22).
+    #[default]
     Flat,
     /// A light, clear tint (mostly see-through); no outline.
     Clear,
