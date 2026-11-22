@@ -76,10 +76,10 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Clone | present | Copy/Paste (`copy-ron`, `paste-ron`), Array (`array-copies`) |
 | Mirror | present | `mirror-h`, `mirror-v` (N-9) |
 | Glue to background | present | `set-static`, hinge world pin |
-| Loosen (drop the body's joints) | missing | **S-6** |
-| Add centre axle / centre thruster | partial | tools place them by click, no one-click centre action: **S-6** |
+| Loosen (drop the body's joints) | done | **S-6**: `loosen`, context menu |
+| Add centre axle / centre thruster | done | **S-6**: `pin-centre`, `thruster-centre`, context menu |
 | Attach tracer | present | tracer tool on a body |
-| Transform into circle | missing | **S-6** |
+| Transform into circle | done | **S-6**: `to-circle` (equal area), context menu |
 | Transform into gear | done | **S-5**: context menu "Make gear", `make-gear` |
 | CSG | present | `merge`, `subtract`, `intersect`, `xor`, `fillet-merge` |
 | Select objects under cursor | present | context "Select from" stack |
@@ -109,7 +109,7 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Feature | Status | Where in Gradiance |
 |---|---|---|
 | Hinge motor: speed, torque, reverse | present | `MotorConfig` (`domain::joint`), joint inspector |
-| Hinge brake | partial | motor at 0 speed with a torque cap holds; no one-click brake: **S-6** |
+| Hinge brake | done | **S-6**: `brake`, joint context menu "Brake motor" |
 | Hinge limits | present | joint inspector limits |
 | Break limit (rope, joint) | present | `JointCommon.break_force`, `JointLoad` tint (N-9) |
 | Spring strength, damping, length | present | spring frequency, damping ratio, rest length |

@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-22 (S-5 gears done; Phase S under way: S-1 merged as #306, roadmap,
+Last updated: 2026-11-22 (S-5 gears and S-6 quick actions done; Phase S under way: S-1 merged as #306, roadmap,
 audit and phase plan aligned; Q-9 closed as not reproducible on main `8f7c547`; Phase Q merged
 as #305; earlier history in git).
 
@@ -38,7 +38,9 @@ as #305; earlier history in git).
   paused `place` lost after the first step and Adjust Last `drag null`).
   **S-5** gears are done: rack-generated teeth, `spawn-gear`, `make-gear`,
   the Gear tool; a polygon leaf now collides as its exact convex partition
-  (see its Outcome). **Next:** S-6..S-22 in number order (S-4 material
+  (see its Outcome). **S-6** quick actions are done (`loosen`,
+  `pin-centre`, `thruster-centre`, `to-circle`, `brake`, one context-menu
+  table). **Next:** S-7..S-22 in number order (S-4 material
   presets rejected by the owner, 2026-11-21, #307).
   **Phase Q is merged (#305):** Q-2..Q-6 and Q-8 done, Q-7 returned (avian
   reports a standing joint correction as velocity; ignored repro,

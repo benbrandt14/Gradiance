@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 159 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 164 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -28,12 +28,14 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `body.index_at` | `(body-index-at x y)` | query | — | — | Index of a body whose shape contains (x, y) (first in id order); -1 if none. | `{"x": 0, "y": 1}` |
 | `body.intersect` | `(intersect a b)` | edit | `intersect` | Context/Intersect | Keep only where bodies a and b overlap (CSG intersect) on a; b is consumed. | `{"a": 0, "b": 1}` |
 | `body.is_static` | `(body-static? i)` | query | — | — | Whether the i-th body is static (1) or not (0). | `{"i": 0}` |
+| `body.loosen` | `(loosen i)` | edit | `delete` | Context/Loosen | Drop every joint of the i-th body (the bodies stay) — one undo step. | `{"i": 3}` |
 | `body.make_gear` | `(make-gear i [teeth])` | edit | `property-edit` | Context/Make gear | Turn the i-th body, a circle, into a spur gear of the same pitch radius (teeth absent: one tooth size for every made gear, so they mesh) — undoable. | `{"i": 0, "teeth": 12}` |
 | `body.merge` | `(merge a b)` | edit | `merge` | Context/Merge into one body | Fuse bodies a and b into one CSG union; a survives. | `{"a": 0, "b": 1}` |
 | `body.mirror_h` | `(mirror-h targets)` | edit | `mirror` | Edit/Mirror horizontally | Mirror the listed bodies left to right across the vertical line through their centre, with their joints and nodes — one undo step. | `{"targets": [0, 1]}` |
 | `body.mirror_v` | `(mirror-v targets)` | edit | `mirror` | Edit/Mirror vertically | Mirror the listed bodies top to bottom across the horizontal line through their centre, with their joints and nodes — one undo step. | `{"targets": [0, 1]}` |
 | `body.nearest_at` | `(nearest-at x y)` | query | — | — | Index of the body whose centre is nearest (x, y); -1 if none. | `{"x": 0, "y": 1}` |
 | `body.nearest_dist` | `(nearest-dist x y)` | query | — | — | Distance from (x, y) to the nearest body centre; -1 if the scene is empty. | `{"x": 0, "y": 1}` |
+| `body.pin_centre` | `(pin-centre i)` | edit | `spawn-joint` | Context/Pin at centre | Hinge the i-th body to the world at its centre, so it can only spin — undoable. Returns the joint's handle. | `{"i": 0}` |
 | `body.place` | `(place i x y angle)` | edit | `commit-transform` | — | Move the i-th body to (x, y) and rotate it to `angle` radians — one undo step. | `{"i": 0, "x": 1.5, "y": 0.25, "angle": 0.5}` |
 | `body.restitution` | `(body-restitution i)` | query | — | — | Bounciness of the i-th body. | `{"i": 0}` |
 | `body.rot` | `(body-rot i)` | query | — | — | Rotation (radians) of the i-th body; NaN if out of range. | `{"i": 0}` |
@@ -55,6 +57,8 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `body.spawn_gear` | `(spawn-gear x y r teeth)` | edit | `spawn-body` | — | Author a spur gear of pitch radius r (metres) and 6 to 64 teeth centred at (x, y); gears of equal r/teeth mesh by contact. Returns its handle. | `{"x": 0, "y": 2, "r": 0.6, "teeth": 12}` |
 | `body.spawn_ground` | `(spawn-ground x y angle)` | edit | `spawn-body` | — | Author a fixed ground half-plane through (x, y) (metres), tilted by angle radians. | `{"x": 0, "y": -2, "angle": 0.1}` |
 | `body.subtract` | `(subtract a b)` | edit | `subtract` | Context/Subtract from first selected | Cut body b's shape out of body a (CSG subtract); b is consumed, a split result becomes pieces. | `{"a": 0, "b": 1}` |
+| `body.thruster_centre` | `(thruster-centre i)` | edit | `spawn-node` | Context/Thruster at centre | Attach a thruster at the i-th body's centre pushing along its local up with the default thrust — undoable. Returns its handle. | `{"i": 0}` |
+| `body.to_circle` | `(to-circle i)` | edit | `property-edit` | Context/To circle | Turn the i-th body into a circle of the same area, centred on its origin (circles and grounds stay) — undoable. | `{"i": 5}` |
 | `body.touch_count` | `(touch-count i)` | query | — | — | How many bodies the i-th body is currently touching; NaN if out of range. | `{"i": 0}` |
 | `body.where` | `(bodies-where clauses)` | query | — | — | Indices of the bodies matching every clause (kind:circle, group:0, ungrouped, palette:3, friction:0.2..0.5, not:…). | `{"clauses": ["kind:circle", "grouped"]}` |
 | `body.x` | `(body-x i)` | query | — | — | X of the i-th body (bodies ordered by id); NaN if out of range. | `{"i": 0}` |
@@ -116,6 +120,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 
 | Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
 |---|---|---|---|---|---|---|
+| `joint.brake` | `(brake i)` | edit | `property-edit` | Context/Brake motor | Brake the i-th joint, a hinge: motor on at 0 rad/s with its torque cap kept — undoable. | `{"i": 0}` |
 | `joint.count` | `(joint-count)` | query | — | — | Number of authored joints in the committed scene. | `{}` |
 | `joint.delete` | `(delete-joint i)` | edit | `delete-joint` | Context/Delete joint, Delete | Remove the i-th joint (id order, as joint-count) — undoable. | `{"i": 0}` |
 | `joint.hinge` | `(hinge a b x y)` | edit | `spawn-joint` | — | Hinge bodies a and b at world point (x, y); b < 0 pins a to the world. | `{"a": 0, "b": 1, "x": -0.2, "y": 1}` |

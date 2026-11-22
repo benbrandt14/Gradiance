@@ -97,6 +97,10 @@ pub struct SceneSnapshot {
     /// The bodies each joint connects (`None`: pinned to the world), in
     /// joint id order: what connectivity decompose walks.
     pub joint_links: Vec<(StableId, Option<StableId>)>,
+    /// Every joint's definition with its id, in joint id order: the old
+    /// value a joint edit (`joint.brake`) needs, and the joints a body's
+    /// `body.loosen` drops (brief S-6).
+    pub joint_defs: Vec<(StableId, JointDef)>,
     /// The group names (scene content).
     pub group_names: GroupNames,
 }
@@ -211,12 +215,16 @@ pub fn snapshot_scene(world: &mut World) -> SceneSnapshot {
         })
         .collect();
     rows.sort_by_key(|b| b.id.0);
-    let mut links: Vec<(StableId, StableId, Option<StableId>)> = world
+    let mut joint_defs: Vec<(StableId, JointDef)> = world
         .query_filtered::<(&StableId, Option<&JointDef>), With<gradiance_domain::Joint>>()
         .iter(world)
-        .filter_map(|(id, def)| def.map(|d| (*id, d.body_a, d.body_b)))
+        .filter_map(|(id, def)| def.map(|d| (*id, d.clone())))
         .collect();
-    links.sort_by_key(|(id, ..)| id.0);
+    joint_defs.sort_by_key(|(id, _)| id.0);
+    let links: Vec<(StableId, Option<StableId>)> = joint_defs
+        .iter()
+        .map(|(_, d)| (d.body_a, d.body_b))
+        .collect();
     let mut joints: Vec<StableId> = world
         .query_filtered::<&StableId, With<gradiance_domain::Joint>>()
         .iter(world)
@@ -237,7 +245,8 @@ pub fn snapshot_scene(world: &mut World) -> SceneSnapshot {
         joints,
         nodes,
         bodies: rows,
-        joint_links: links.into_iter().map(|(_, a, b)| (a, b)).collect(),
+        joint_links: links,
+        joint_defs,
         group_names,
     }
 }

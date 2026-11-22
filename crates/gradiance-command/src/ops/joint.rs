@@ -38,7 +38,7 @@ pub(super) fn register(registry: &mut OpRegistry) {
 /// **world** points `[on_a, on_b]` (the same point for a hinge or a slider;
 /// each body's centre for a spring), converted into each body's local frame.
 /// A world pin's far anchor is `on_a`.
-fn joint_record(
+pub(super) fn joint_record(
     ctx: &OpContext,
     a: &BodySnapshot,
     b: Option<&BodySnapshot>,

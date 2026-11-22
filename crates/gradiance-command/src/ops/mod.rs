@@ -33,6 +33,7 @@ pub mod look;
 pub mod node;
 pub mod quantity;
 pub mod query;
+pub mod quick;
 pub mod scene;
 pub mod sets;
 pub mod sketch;
@@ -225,6 +226,7 @@ impl Plugin for SceneOpsPlugin {
             scene::register(&mut registry);
             look::register(&mut registry);
             query::register(&mut registry);
+            quick::register(&mut registry);
             quantity::register(&mut registry);
             units::register(&mut registry);
         }
@@ -270,6 +272,7 @@ mod tests {
             joints: vec![id(99)],
             nodes: Vec::new(),
             joint_links: Vec::new(),
+            joint_defs: Vec::new(),
             group_names: gradiance_domain::group::GroupNames::default(),
         }
     }

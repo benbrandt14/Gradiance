@@ -772,7 +772,7 @@ Each gap below reuses an existing seam; one brief each, in this order:
 5. **S-5** gear outline + gear tool (meshing by contact, no constraint) —
    done.
 6. **S-6** context quick actions: loosen, centre pin, centre thruster,
-   to circle, motor brake.
+   to circle, motor brake — done.
 7. **S-7** contact hit pulse signal, removal on contact, time to live
    (derived for the run, undone with it).
 8. **S-8** surface velocity (conveyor); returns if avian 0.8 has no
