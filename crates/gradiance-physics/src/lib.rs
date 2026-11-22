@@ -24,6 +24,7 @@ pub mod laser;
 pub mod lifetime;
 pub mod motor;
 pub mod queries;
+pub mod surface;
 pub mod thrust;
 
 use avian2d::prelude::*;
@@ -57,6 +58,8 @@ impl Plugin for GradiancePhysicsPlugin {
         // bodies (`retune_joints`), matching Box2D's motor-keeps-awake rule.
         app.add_plugins(
             PhysicsPlugins::default()
+                // Conveyor surfaces (brief S-8): the one hook set of the app.
+                .with_collision_hooks::<surface::GradianceHooks>()
                 // The world is SI: 1 world unit = 1 metre, so avian's
                 // length-based tolerances need no scaling (pixels live only at
                 // the render/pick seam).
@@ -112,6 +115,7 @@ impl Plugin for GradiancePhysicsPlugin {
         app.add_systems(First, clear_stepped_flag);
         app.add_systems(PostStartup, seed_last_physics_tick);
         lifetime::install(app);
+        surface::install(app);
         app.add_systems(FixedFirst, advance_owed_step);
         app.add_systems(
             Update,

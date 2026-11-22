@@ -39,6 +39,7 @@ pub(super) fn register(registry: &mut OpRegistry) {
     registry.register::<SetArrows>();
     registry.register::<SetIndex>();
     registry.register::<SetLifetime>();
+    registry.register::<SetSurfaceSpeed>();
 }
 
 /// Move the body `i` to (`x`, `y`) and rotate it to `angle`: one undo step.
@@ -778,6 +779,49 @@ impl Operation for SetLifetime {
                 id: body.id,
                 old: PropertyValue::Lifetime(body.lifetime),
                 new: PropertyValue::Lifetime(new),
+            })
+            .collect();
+        if changes.is_empty() {
+            return Ok(OpOutput::none());
+        }
+        Ok(OpOutput::none().message(PropertyEditIntent { changes }))
+    }
+}
+
+/// Make a body a conveyor (brief S-8): its surface runs along its outline
+/// at `v` m/s and carries what rests on it, while the body stays put.
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct SetSurfaceSpeed {
+    /// The body.
+    pub i: Target,
+    /// The surface speed: positive counter-clockwise, 0 a still surface.
+    pub v: gradiance_units::Velocity,
+}
+
+impl Operation for SetSurfaceSpeed {
+    const META: OpMeta = OpMeta {
+        id: "body.set_surface_speed",
+        lisp: "set-surface-speed",
+        doc: "Run the i-th body's surface along its outline at v m/s (positive counter-clockwise, so a positive top carries a load left; 0 stops it): a conveyor that carries what rests on it while the body stays put — undoable, saved.",
+        seam: Seam::Edit,
+        menu: None,
+        chord: None,
+        undo: Some(name::PROPERTY_EDIT),
+        example: r#"{"i": 0, "v": -1}"#,
+    };
+
+    fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
+        let scene = ctx.get::<SceneSnapshot>()?;
+        let new = gradiance_domain::surface::SurfaceSpeed(self.v).sanitized();
+        let changes: Vec<PropertyChange> = bodies_of(ctx, scene, &self.i)?
+            .into_iter()
+            .filter_map(|id| scene.get(id))
+            .filter(|body| body.surface != new)
+            .map(|body| PropertyChange {
+                id: body.id,
+                old: PropertyValue::SurfaceSpeed(body.surface),
+                new: PropertyValue::SurfaceSpeed(new),
             })
             .collect();
         if changes.is_empty() {

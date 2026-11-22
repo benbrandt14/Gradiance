@@ -82,6 +82,9 @@ pub struct BodyRecord {
     /// touches or itself after a time.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lifetime: Option<gradiance_domain::lifetime::Lifetime>,
+    /// Conveyor speed along the outline (brief S-8), if the surface moves.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub surface: Option<gradiance_domain::surface::SurfaceSpeed>,
 }
 
 impl BodyRecord {
@@ -115,6 +118,9 @@ impl BodyRecord {
                 .copied(),
             lifetime: entity_ref
                 .get::<gradiance_domain::lifetime::Lifetime>()
+                .copied(),
+            surface: entity_ref
+                .get::<gradiance_domain::surface::SurfaceSpeed>()
                 .copied(),
         })
     }
@@ -152,6 +158,9 @@ impl BodyRecord {
         }
         if let Some(lifetime) = self.lifetime {
             entity.insert(lifetime);
+        }
+        if let Some(surface) = self.surface {
+            entity.insert(surface);
         }
         entity.id()
     }
@@ -249,6 +258,16 @@ impl BodyRecord {
                 }
                 None => {
                     entity.remove::<gradiance_domain::lifetime::Lifetime>();
+                }
+            }
+        }
+        if self.surface != prev.surface {
+            match self.surface {
+                Some(surface) => {
+                    entity.insert(surface);
+                }
+                None => {
+                    entity.remove::<gradiance_domain::surface::SurfaceSpeed>();
                 }
             }
         }

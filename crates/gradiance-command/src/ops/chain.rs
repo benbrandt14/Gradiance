@@ -295,6 +295,7 @@ mod tests {
             motion: None,
             optics: None,
             lifetime: None,
+            surface: None,
         };
         let (bodies, joints) = chain_records(
             &points,

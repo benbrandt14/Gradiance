@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 165 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 166 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -50,6 +50,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `body.set_restitution` | `(set-restitution i v)` | edit | `property-edit` | — | Set the i-th body's bounciness, 0 = dead, 1 = perfectly elastic — undoable. | `{"i": 0, "v": 0.8}` |
 | `body.set_spin` | `(set-spin i w)` | edit | `property-edit` | — | Set the spin (rad/s, counter-clockwise) the i-th body starts each run with. Applied when play starts from an edited layout, not on resume — undoable, saved. | `{"i": 0, "w": 2}` |
 | `body.set_static` | `(set-static i on)` | edit | `property-edit` | — | Make the i-th body static when `on` is non-zero, dynamic otherwise — undoable. | `{"i": 0, "on": 1}` |
+| `body.set_surface_speed` | `(set-surface-speed i v)` | edit | `property-edit` | — | Run the i-th body's surface along its outline at v m/s (positive counter-clockwise, so a positive top carries a load left; 0 stops it): a conveyor that carries what rests on it while the body stays put — undoable, saved. | `{"i": 0, "v": -1}` |
 | `body.set_velocity` | `(set-velocity i vx vy)` | edit | `property-edit` | — | Set the velocity (vx, vy in m/s) the i-th body starts each run with; (0, 0) and no spin: it starts at rest. Applied when play starts from an edited layout, not on resume — undoable, saved. | `{"i": 0, "vx": 3, "vy": 0}` |
 | `body.sketch` | `(sketch path width)` | edit | `spawn-body` | — | Author one body from a freehand stroke width wide along path [x0 y0 x1 y1 …]: simplified into capsule segments joined as one union, or filled as a polygon when the stroke closes on itself. Returns its handle. | `{"path": [-1, 1, -0.5, 1.4, 0, 1, 0.5, 1.4, 1, 1], "width": 0.1}` |
 | `body.spawn_box` | `(spawn-box x y w h)` | edit | `spawn-body` | — | Author a box body of size w×h centred at (x, y), in metres; returns its handle. | `{"x": 0.5, "y": 2, "w": 1.6, "h": 1.2}` |
