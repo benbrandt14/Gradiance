@@ -782,7 +782,7 @@ Each gap below reuses an existing seam; one brief each, in this order:
 Added 2026-11-21 (owner: "include the others"):
 
 10. **S-10** particle fluid: spike + decision note (method, body
-    coupling, budget). 11. **S-11** liquify, water fill, drain (after S-10).
+    coupling, budget) — done. 11. **S-11** liquify, water fill, drain (after S-10).
 12. **S-12** sponge: a spring lattice inside the outline.
 13. **S-13** image texture on a body (through the toon ramp or raw).
 14. **S-14** shape from an image (alpha → field leaf or traced polygon).

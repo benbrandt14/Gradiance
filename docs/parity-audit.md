@@ -121,7 +121,7 @@ jitter, water surface, laser canvas block, `signal.bind`).
 
 | Feature | Status | Where in Gradiance |
 |---|---|---|
-| Particle water, add water | missing | `Fluid` region (N-7) floats bodies; particles: **S-10** spike, **S-11** tools |
+| Particle water, add water | partial | `Fluid` region (N-7) floats bodies; particles: **S-10** spike done (`docs/particle-fluid-decision.md`), **S-11** tools |
 | Refraction, total internal reflection | missing | **S-3** |
 | Mirror (index ∞) | present | every solid body reflects (N-8) |
 | Dispersion, white light | missing | **S-15** (after S-3) |

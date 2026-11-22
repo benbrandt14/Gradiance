@@ -1,5 +1,5 @@
 # Particle fluid (spike and decision)
-Phase S (sandbox parity) · roadmap § "Sandbox parity" ("particle water") · status: ready
+Phase S (sandbox parity) · roadmap § "Sandbox parity" ("particle water") · status: done
 
 Written by the parity audit thread, 2026-11-21, after the owner ruling "include the others" (`docs/parity-audit.md`). Docs only.
 
@@ -50,3 +50,25 @@ Liquify and the water tools (S-11). Surface rendering. Saving particles.
 - Decision note committed; fmt, clippy, tests, doc gate green.
 
 ## Outcome
+
+Done (2026-11-22). The decision note is `docs/particle-fluid-decision.md`.
+
+- **Method:** double-density relaxation (Clavet 2005, no springs), four
+  substeps per physics step, a uniform grid, persistent buffers. Pure step
+  maths in `physics::particles::solver` (no ECS); the one system is
+  `physics::particles::step_particle_fluid` in `FixedUpdate`.
+- **Coupling:** candidate (a). Particles read bodies as SDFs and pay
+  dynamic bodies equal and opposite impulses through `Forces`. A wall
+  table (`WallTable`) counts the solid as fluid for a particle by a body;
+  without it a half-density box sat 57 % submerged.
+- **Gate:** a runtime gate (no particles: the step returns), not a Cargo
+  feature, so CI runs the test. Decisions `particle-fluid-gate` and
+  `particle-fluid-coupling` in `docs/review/archive.ron`.
+- **Render:** overlay discs (`render::particles_viz`).
+- **Measured:** 2 000 particles step in 7.2 to 8.1 ms per physics step in
+  the dev profile; settled density 1 018 kg/m²; a box of half that density
+  floats 50.6 % submerged.
+- **Tests:** `tests/it/particle_water.rs` (the spike scene and the float
+  test), `particles::solver` unit test (a column settles, the floor
+  carries the weight within 15 %).
+
