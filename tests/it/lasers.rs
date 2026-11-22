@@ -394,3 +394,69 @@ fn duplicating_a_laser_and_its_target_retargets_the_copy() {
     );
     assert!(beam(&app, copy).hit, "and reaches it");
 }
+
+/// Brief S-3: a beam through a 60-degree prism of index 1.5, entering at
+/// the minimum-deviation incidence, is turned by the textbook angle
+/// `2 asin(n sin 30°) − 60° ≈ 37.18°`; the same prism as a mirror (no
+/// index) reflects it instead.
+#[test]
+fn a_prism_deviates_a_beam_by_the_minimum_deviation_angle() {
+    let n: f32 = 1.5;
+    let apex = 60_f32.to_radians();
+    let expected = 2.0 * (n * (apex / 2.0).sin()).asin() - apex;
+    let mut app = headless_app();
+    zero_gravity(&mut app);
+    // An equilateral prism of side 2 m, centroid at the origin, base down.
+    let h = 3_f32.sqrt();
+    let mut prism = box_record(Vec2::ZERO, 1.0, 1.0);
+    prism.shape = ShapeDef::Polygon {
+        outline: vec![
+            Vec2::new(-1.0, -h / 3.0),
+            Vec2::new(1.0, -h / 3.0),
+            Vec2::new(0.0, 2.0 * h / 3.0),
+        ],
+        holes: Vec::new(),
+    };
+    prism.physics.rigid_body = RigidBody::Static;
+    let prism_id = spawn_body(&mut app, prism);
+    invoke(
+        app.world_mut(),
+        "body.set_index",
+        json!({"i": prism_id.0.to_string(), "n": n}),
+    )
+    .unwrap();
+    // Aim at the left face's midpoint, at the incidence that runs the beam
+    // parallel to the base inside: (apex + deviation) / 2 from the normal,
+    // which is a rise of that minus 30 degrees.
+    let incidence = f32::midpoint(apex, expected);
+    let rise = incidence - apex / 2.0;
+    let dir = Vec2::from_angle(rise);
+    let mid = Vec2::new(-0.5, h / 6.0);
+    let laser = spawn_laser(&mut app, mid - dir * 2.0, rise, "prism", None);
+    step(&mut app, 4);
+    let path = beam(&app, laser).path;
+    assert!(path.len() >= 4, "into, through and out: {path:?}");
+    let first = (path[1] - path[0]).normalize();
+    let last = (path[path.len() - 1] - path[path.len() - 2]).normalize();
+    let deviation = first.angle_to(last).abs().to_degrees();
+    assert!(
+        (deviation - expected.to_degrees()).abs() < 0.5,
+        "deviated {deviation} degrees, expected {}",
+        expected.to_degrees()
+    );
+    // Inside, the beam runs parallel to the base.
+    let inside = (path[2] - path[1]).normalize();
+    assert!(inside.y.abs() < 0.01, "inside: {inside}");
+
+    // As a mirror it reflects at the first face.
+    invoke(
+        app.world_mut(),
+        "body.set_index",
+        json!({"i": prism_id.0.to_string(), "n": 0}),
+    )
+    .unwrap();
+    step(&mut app, 4);
+    let path = beam(&app, laser).path;
+    let back = (path[2] - path[1]).normalize();
+    assert!(back.x < 0.0, "reflected back left: {path:?}");
+}

@@ -75,6 +75,9 @@ pub struct BodyRecord {
     /// Initial velocity and spin (brief S-1), if the body starts moving.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub motion: Option<gradiance_domain::motion::InitialMotion>,
+    /// Refractive index (brief S-3), if a beam passes through the body.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub optics: Option<gradiance_domain::optics::Optics>,
 }
 
 impl BodyRecord {
@@ -102,6 +105,9 @@ impl BodyRecord {
             fluid: entity_ref.get::<gradiance_domain::fluid::Fluid>().copied(),
             motion: entity_ref
                 .get::<gradiance_domain::motion::InitialMotion>()
+                .copied(),
+            optics: entity_ref
+                .get::<gradiance_domain::optics::Optics>()
                 .copied(),
         })
     }
@@ -133,6 +139,9 @@ impl BodyRecord {
         }
         if let Some(motion) = self.motion {
             entity.insert(motion);
+        }
+        if let Some(optics) = self.optics {
+            entity.insert(optics);
         }
         entity.id()
     }
@@ -210,6 +219,16 @@ impl BodyRecord {
                 }
                 None => {
                     entity.remove::<gradiance_domain::motion::InitialMotion>();
+                }
+            }
+        }
+        if self.optics != prev.optics {
+            match self.optics {
+                Some(optics) => {
+                    entity.insert(optics);
+                }
+                None => {
+                    entity.remove::<gradiance_domain::optics::Optics>();
                 }
             }
         }

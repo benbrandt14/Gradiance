@@ -249,6 +249,7 @@ pub(crate) fn piece_records(original: &BodyRecord, components: Vec<Contours>) ->
                 tracer: original.tracer,
                 fluid: original.fluid,
                 motion: original.motion,
+                optics: original.optics,
             }
         })
         .collect()

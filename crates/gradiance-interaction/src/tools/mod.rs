@@ -254,5 +254,6 @@ pub fn new_body_record(shape: ShapeDef, pos: Vec2, rot: f32) -> gradiance_scene:
         tracer: None,
         fluid: None,
         motion: None,
+        optics: None,
     }
 }

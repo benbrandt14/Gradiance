@@ -199,6 +199,15 @@ inspector, the node menu and the Signals list (one undo step per gesture);
 the target is cleared there, or set to the one other selected body with
 the **selection** button (inspector and node menu).
 
+A body with a **refractive index** (`domain::optics::Optics`, brief S-3:
+`(set-index i n)` or the inspector's "transparent" row) lets the beam
+through: it bends by Snell's law going in and out, reflects inside past the
+critical angle, and every bend counts against the bounce limit
+(`geometry::beam::trace_optics`; inside a body the cast runs against its
+hollow outline, skipping the seams of a compound collider). A body without
+an index is a mirror, as before. A laser has a beam colour (a palette
+swatch, or the look's laser ink).
+
 On the node canvas a laser is a block with two outputs, **hit** and
 **distance** (brief Q-4): a wire from a pin is the same name-based binding
 as typing `<name>` or `<name>.distance` (`SignalSource::Named`); a

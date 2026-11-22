@@ -55,6 +55,9 @@ pub struct BodySnapshot {
     /// The initial motion, if any: the old half of a `set-velocity` /
     /// `set-spin` edit (brief S-1).
     pub motion: Option<gradiance_domain::motion::InitialMotion>,
+    /// The refractive index, if any: the old half of a `set-index` edit
+    /// (brief S-3).
+    pub optics: Option<gradiance_domain::optics::Optics>,
 }
 
 impl BodySnapshot {
@@ -203,6 +206,7 @@ pub fn snapshot_scene(world: &mut World) -> SceneSnapshot {
                 motion: entity
                     .get::<gradiance_domain::motion::InitialMotion>()
                     .copied(),
+                optics: entity.get::<gradiance_domain::optics::Optics>().copied(),
             }
         })
         .collect();

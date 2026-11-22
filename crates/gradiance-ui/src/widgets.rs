@@ -613,6 +613,44 @@ fn laser_editor(
             committed = true;
         }
     });
+    committed |= beam_colour_row(ui, laser);
+    committed
+}
+
+/// A laser's beam colour (brief S-3): a palette swatch, or "auto" for the
+/// look's laser ink. One click, one edit; returns whether it changed.
+fn beam_colour_row(ui: &mut egui::Ui, laser: &mut gradiance_domain::laser::Laser) -> bool {
+    let mut committed = false;
+    ui.horizontal(|ui| {
+        ui.label("beam");
+        if ui
+            .selectable_label(laser.color.is_none(), "auto")
+            .on_hover_text("the look's laser colour")
+            .clicked()
+            && laser.color.is_some()
+        {
+            laser.color = None;
+            committed = true;
+        }
+        for swatch in gradiance_domain::appearance::PALETTE {
+            let fill = crate::inspector::swatch_color32(ui.ctx(), swatch.color);
+            let chosen = laser.color == Some(swatch.color);
+            if ui
+                .add(
+                    egui::Button::new("")
+                        .fill(fill)
+                        .selected(chosen)
+                        .min_size(egui::vec2(12.0, 12.0)),
+                )
+                .on_hover_text(swatch.name)
+                .clicked()
+                && !chosen
+            {
+                laser.color = Some(swatch.color);
+                committed = true;
+            }
+        }
+    });
     committed
 }
 

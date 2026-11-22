@@ -53,6 +53,25 @@ pub fn reflect(dir: Vec2, normal: Vec2) -> Vec2 {
     dir - 2.0 * dir.dot(n) * n
 }
 
+/// The direction `dir` refracted at a surface with normal `normal` (any
+/// length or sign) from a medium of index `n1` into one of index `n2`, by
+/// Snell's law (`n1 sin θ1 = n2 sin θ2`). `None` on total internal
+/// reflection (no refracted ray exists). Pure.
+#[must_use]
+pub fn refract(dir: Vec2, normal: Vec2, n1: f32, n2: f32) -> Option<Vec2> {
+    let d = dir.try_normalize()?;
+    let n = normal.try_normalize()?;
+    // The normal facing back at the incoming ray.
+    let n = if d.dot(n) > 0.0 { -n } else { n };
+    let eta = n1 / n2;
+    let cos_i = -d.dot(n);
+    let k = 1.0 - eta * eta * (1.0 - cos_i * cos_i);
+    if !k.is_finite() || k < 0.0 {
+        return None;
+    }
+    (eta * d + (eta * cos_i - k.sqrt()) * n).try_normalize()
+}
+
 /// Traces a beam from `origin` along `dir` for at most `range` metres and
 /// `max_bounces` reflections, writing its corners into `path` (cleared
 /// first; the origin, each hit, and the end of the last segment).
@@ -62,14 +81,52 @@ pub fn reflect(dir: Vec2, normal: Vec2) -> Vec2 {
 /// laser's target). A hit with a zero or non-finite normal, or a non-finite
 /// distance, also ends it: there is no surface to reflect off. Pure; no
 /// allocation once `path` has room for `max_bounces + 2` points.
-pub fn trace_beam<K: Copy>(
+///
+/// Every surface is a mirror: [`trace_optics`] with no refractive bodies.
+pub fn trace_beam<K: Copy + PartialEq>(
     origin: Vec2,
     dir: Vec2,
     range: f32,
     max_bounces: u32,
     path: &mut Vec<Vec2>,
     mut cast: impl FnMut(Vec2, Vec2, f32) -> Option<RayHit<K>>,
+    absorbs: impl FnMut(K) -> bool,
+) -> BeamEnd<K> {
+    trace_optics(
+        origin,
+        dir,
+        range,
+        max_bounces,
+        path,
+        |o, d, max, _| cast(o, d, max),
+        absorbs,
+        |_| None,
+    )
+}
+
+/// [`trace_beam`] through bodies that may **refract** (brief S-3).
+///
+/// `index(key)` is a hit body's refractive index, `None` for a mirror (every
+/// body before S-3). The beam starts in air (index 1). At a body with an
+/// index it bends into it by Snell's law; inside, `cast(o, d, max, Some(key))`
+/// must find where it leaves `key` (the physics layer casts against that
+/// body's boundary); at the exit it bends back out, or reflects inside on
+/// total internal reflection. Every reflection and refraction counts
+/// against `max_bounces`. A beam inside a body ignores other bodies (no
+/// nested media). Pure; no allocation once `path` has room.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the walk and its three callbacks"
+)]
+pub fn trace_optics<K: Copy + PartialEq>(
+    origin: Vec2,
+    dir: Vec2,
+    range: f32,
+    max_bounces: u32,
+    path: &mut Vec<Vec2>,
+    mut cast: impl FnMut(Vec2, Vec2, f32, Option<K>) -> Option<RayHit<K>>,
     mut absorbs: impl FnMut(K) -> bool,
+    mut index: impl FnMut(K) -> Option<f32>,
 ) -> BeamEnd<K> {
     path.clear();
     let mut end = BeamEnd {
@@ -90,8 +147,10 @@ pub fn trace_beam<K: Copy>(
     let mut p = origin;
     let mut remaining = range;
     let mut bounces = 0;
+    // The body the beam is travelling through, with its index.
+    let mut inside: Option<(K, f32)> = None;
     loop {
-        let Some(hit) = cast(p, d, remaining) else {
+        let Some(hit) = cast(p, d, remaining, inside.map(|(k, _)| k)) else {
             path.push(p + d * remaining);
             end.length += remaining;
             end.last = None;
@@ -105,7 +164,7 @@ pub fn trace_beam<K: Copy>(
         path.push(q);
         end.length += distance;
         end.last = Some(hit.key);
-        if absorbs(hit.key) {
+        if inside.is_none() && absorbs(hit.key) {
             end.absorbed = true;
             return end;
         }
@@ -118,8 +177,24 @@ pub fn trace_beam<K: Copy>(
         }
         // The normal on the side the beam came from.
         let outward = if d.dot(n) > 0.0 { -n } else { n };
-        d = reflect(d, n);
-        p = q + outward * SURFACE_EPSILON;
+        // The media on either side of this surface.
+        let (n1, n2, next) = match inside {
+            Some((k, n_in)) if k == hit.key => (n_in, 1.0, None),
+            Some(here) => (here.1, here.1, Some(here)),
+            None => match index(hit.key).filter(|n| n.is_finite() && *n > 0.0) {
+                Some(n_body) => (1.0, n_body, Some((hit.key, n_body))),
+                None => (1.0, f32::INFINITY, None),
+            },
+        };
+        if let Some(t) = refract(d, n, n1, n2).filter(|_| n2.is_finite()) {
+            d = t;
+            p = q - outward * SURFACE_EPSILON;
+            inside = next;
+        } else {
+            // A mirror, or total internal reflection: stay on this side.
+            d = reflect(d, n);
+            p = q + outward * SURFACE_EPSILON;
+        }
         bounces += 1;
     }
 }
@@ -128,6 +203,83 @@ pub fn trace_beam<K: Copy>(
 mod tests {
     use super::*;
     use core::f32::consts::{FRAC_1_SQRT_2, SQRT_2};
+
+    #[test]
+    fn snell_bends_a_ray_into_glass_and_reflects_it_totally_inside() {
+        // 30 degrees from the normal into n = 1.5: asin(sin 30 / 1.5).
+        let d = Vec2::new(30_f32.to_radians().sin(), -30_f32.to_radians().cos());
+        let t = refract(d, Vec2::Y, 1.0, 1.5).expect("refracts");
+        let angle = t.x.atan2(-t.y).to_degrees();
+        assert!((angle - 19.47).abs() < 0.01, "{angle}");
+        // 50 degrees inside n = 1.5 is past the critical 41.8 degrees.
+        let d = Vec2::new(50_f32.to_radians().sin(), 50_f32.to_radians().cos());
+        assert_eq!(refract(d, Vec2::NEG_Y, 1.5, 1.0), None);
+        // Straight on passes straight through.
+        let t = refract(Vec2::NEG_Y, Vec2::Y, 1.0, 1.5).unwrap();
+        assert!((t - Vec2::NEG_Y).length() < 1e-6);
+    }
+
+    /// A slab of glass between `y = -1` and `y = 0` (key 7), cast
+    /// analytically: from outside the nearest face, from inside the far one.
+    fn slab(o: Vec2, d: Vec2, max: f32, inside: Option<usize>) -> Option<RayHit<usize>> {
+        let faces = [0.0_f32, -1.0];
+        let mut best: Option<f32> = None;
+        for c in faces {
+            if d.y.abs() < 1e-9 {
+                continue;
+            }
+            let t = (c - o.y) / d.y;
+            let min = if inside.is_some() { 1e-6 } else { 0.0 };
+            if t >= min && t <= max && best.is_none_or(|b| t < b) {
+                best = Some(t);
+            }
+        }
+        best.map(|t| RayHit {
+            distance: t,
+            normal: Vec2::Y,
+            key: 7,
+        })
+    }
+
+    #[test]
+    fn a_beam_through_a_glass_slab_leaves_parallel_and_shifted() {
+        let mut path = Vec::new();
+        let d = Vec2::new(1.0, -1.0);
+        let end = trace_optics(
+            Vec2::new(0.0, 1.0),
+            d,
+            10.0,
+            8,
+            &mut path,
+            slab,
+            |_| false,
+            |_| Some(1.5),
+        );
+        assert!(!end.absorbed);
+        // In, through, out: origin, two faces, the end.
+        assert_eq!(path.len(), 4, "{path:?}");
+        let out = (path[3] - path[2]).normalize();
+        assert!(
+            (out - d.normalize()).length() < 1e-4,
+            "leaves parallel: {out}"
+        );
+        // Inside it runs steeper than outside (bent toward the normal).
+        let inside = (path[2] - path[1]).normalize();
+        assert!(inside.y.abs() > d.normalize().y.abs());
+        // A mirror slab (no index) reflects at the first face.
+        let end = trace_optics(
+            Vec2::new(0.0, 1.0),
+            d,
+            10.0,
+            8,
+            &mut path,
+            slab,
+            |_| false,
+            |_| None,
+        );
+        assert!(!end.absorbed);
+        assert!(path[2].y > 0.0, "reflected back up: {path:?}");
+    }
 
     /// A two-sided line mirror `{p : n · p = c}` and a disc target, cast
     /// analytically. Keys: 0 the mirror, 1 the disc.

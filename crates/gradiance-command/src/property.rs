@@ -33,6 +33,8 @@ pub enum PropertyValue {
     Field(Option<gradiance_domain::field::FieldSource>),
     /// Fluid region (`None` = not a fluid; brief N-7).
     Fluid(Option<gradiance_domain::fluid::Fluid>),
+    /// Refractive index (`None` = a mirror to beams; brief S-3).
+    Optics(Option<gradiance_domain::optics::Optics>),
     /// Initial velocity and spin (`None` = starts at rest; brief S-1).
     InitialMotion(Option<gradiance_domain::motion::InitialMotion>),
     /// Trajectory-trail marker (`None` = no tracer).
@@ -56,6 +58,19 @@ pub enum PropertyValue {
         gradiance_domain::node::NodeAttachment,
         gradiance_core::units::PosRot,
     ),
+}
+
+/// Inserts `value` on the entity, or removes the component when `None`: an
+/// optional authored component (field, fluid, optics, tracer).
+fn set_optional<C: Component>(entity: &mut EntityWorldMut, value: Option<C>) {
+    match value {
+        Some(c) => {
+            entity.insert(c);
+        }
+        None => {
+            entity.remove::<C>();
+        }
+    }
 }
 
 impl PropertyValue {
@@ -83,22 +98,15 @@ impl PropertyValue {
             Self::GravityScale(v) => {
                 entity_mut.insert(*v);
             }
-            Self::Field(field) => match field {
-                Some(f) => {
-                    entity_mut.insert(*f);
-                }
-                None => {
-                    entity_mut.remove::<gradiance_domain::field::FieldSource>();
-                }
-            },
-            Self::Fluid(fluid) => match fluid {
-                Some(f) => {
-                    entity_mut.insert(f.sanitized());
-                }
-                None => {
-                    entity_mut.remove::<gradiance_domain::fluid::Fluid>();
-                }
-            },
+            Self::Field(field) => set_optional(&mut entity_mut, *field),
+            Self::Fluid(fluid) => set_optional(
+                &mut entity_mut,
+                fluid.map(gradiance_domain::fluid::Fluid::sanitized),
+            ),
+            Self::Optics(optics) => set_optional(
+                &mut entity_mut,
+                optics.map(gradiance_domain::optics::Optics::sanitized),
+            ),
             // A motion at rest is no motion: the record stays empty.
             Self::InitialMotion(motion) => {
                 match motion.map(gradiance_domain::motion::InitialMotion::sanitized) {
@@ -110,14 +118,7 @@ impl PropertyValue {
                     }
                 }
             }
-            Self::Tracer(tracer) => match tracer {
-                Some(t) => {
-                    entity_mut.insert(*t);
-                }
-                None => {
-                    entity_mut.remove::<gradiance_domain::tracer::Tracer>();
-                }
-            },
+            Self::Tracer(tracer) => set_optional(&mut entity_mut, *tracer),
             Self::Sensor(on) => {
                 if *on {
                     entity_mut.insert(Sensor);

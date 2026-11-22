@@ -71,6 +71,7 @@ pub fn spawned_body_record(id: StableId, shape: ShapeDef, pos: Vec2) -> BodyReco
         tracer: None,
         fluid: None,
         motion: None,
+        optics: None,
     }
 }
 
@@ -263,6 +264,7 @@ mod tests {
                     groups: Vec::new(),
                     fluid: None,
                     motion: None,
+                    optics: None,
                 })
                 .collect(),
             joints: vec![id(99)],

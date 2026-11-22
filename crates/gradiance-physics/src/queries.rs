@@ -428,24 +428,68 @@ pub fn cast_beam(
     filter: &SpatialQueryFilter,
     admit: &dyn Fn(Entity) -> bool,
     target: Option<Entity>,
+    optics: &dyn Fn(Entity) -> Option<f32>,
     path: &mut Vec<Vec2>,
 ) -> gradiance_geometry::beam::BeamEnd<Entity> {
-    gradiance_geometry::beam::trace_beam(
+    gradiance_geometry::beam::trace_optics(
         origin,
         dir,
         range,
         bounces,
         path,
-        |o, d, max| {
+        |o, d, max, inside| {
             let d = Dir2::new(d).ok()?;
-            spatial
-                .cast_ray_predicate(o, d, max, true, filter, admit)
-                .map(|h| gradiance_geometry::beam::RayHit {
-                    distance: h.distance,
-                    normal: h.normal,
-                    key: h.entity,
-                })
+            match inside {
+                None => spatial
+                    .cast_ray_predicate(o, d, max, true, filter, admit)
+                    .map(|h| gradiance_geometry::beam::RayHit {
+                        distance: h.distance,
+                        normal: h.normal,
+                        key: h.entity,
+                    }),
+                Some(body) => exit_of(spatial, body, o, d, max),
+            }
         },
         |e| Some(e) == target,
+        optics,
     )
+}
+
+/// Where a beam inside `body` leaves it (brief S-3): its boundary along the
+/// ray (`solid: false` casts against the hollow outline). A compound
+/// collider has seams between its convex pieces; a boundary point with the
+/// body still on its far side is a seam, so the cast carries on past it.
+/// At most a few casts per exit (one per seam crossed).
+fn exit_of(
+    spatial: &SpatialQuery,
+    body: Entity,
+    origin: Vec2,
+    dir: Dir2,
+    max: f32,
+) -> Option<gradiance_geometry::beam::RayHit<Entity>> {
+    const SEAM_STEP: f32 = 1e-3;
+    const MAX_SEAMS: usize = 16;
+    let only = SpatialQueryFilter::default();
+    let mut travelled = 0.0;
+    for _ in 0..MAX_SEAMS {
+        let start = origin + *dir * travelled;
+        let hit = spatial
+            .cast_ray_predicate(start, dir, max - travelled, false, &only, &|e| e == body)?;
+        let at = travelled + hit.distance;
+        let beyond = origin + *dir * (at + SEAM_STEP);
+        let mut still_inside = false;
+        spatial.point_intersections_callback(beyond, &only, |e| {
+            still_inside |= e == body;
+            !still_inside
+        });
+        if !still_inside {
+            return Some(gradiance_geometry::beam::RayHit {
+                distance: at,
+                normal: hit.normal,
+                key: body,
+            });
+        }
+        travelled = at + SEAM_STEP;
+    }
+    None
 }

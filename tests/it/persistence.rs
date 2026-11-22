@@ -144,6 +144,9 @@ fn body_strategy() -> impl Strategy<Value = BodyRecord> {
                         velocity: gradiance::units::Velocity2(bevy::math::Vec2::new(x, y)),
                         spin: gradiance::units::AngularVelocity(rot),
                     }),
+                    optics: (y > 0.0).then_some(gradiance::domain::optics::Optics {
+                        index: 1.0 + x.abs(),
+                    }),
                 }
             },
         )

@@ -37,6 +37,7 @@ pub(super) fn register(registry: &mut OpRegistry) {
     registry.register::<SetVelocity>();
     registry.register::<SetSpin>();
     registry.register::<SetArrows>();
+    registry.register::<SetIndex>();
 }
 
 /// Move the body `i` to (`x`, `y`) and rotate it to `angle`: one undo step.
@@ -681,6 +682,51 @@ impl Operation for SetArrows {
                     arrows,
                     ..body.appearance
                 }),
+            })
+            .collect();
+        if changes.is_empty() {
+            return Ok(OpOutput::none());
+        }
+        Ok(OpOutput::none().message(PropertyEditIntent { changes }))
+    }
+}
+
+/// Make a body transparent to laser beams with a refractive index (brief
+/// S-3), or a mirror again.
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct SetIndex {
+    /// The body.
+    pub i: Target,
+    /// The refractive index (1.33 water, 1.5 glass, held to 1..4); 0 or
+    /// less: a mirror again.
+    pub n: f32,
+}
+
+impl Operation for SetIndex {
+    const META: OpMeta = OpMeta {
+        id: "body.set_index",
+        lisp: "set-index",
+        doc: "Give the i-th body a refractive index n (1.33 water, 1.5 glass; held to 1..4): laser beams pass through it, bent by Snell's law, and reflect inside past the critical angle. n 0 or less makes it a mirror again — undoable, saved.",
+        seam: Seam::Edit,
+        menu: None,
+        chord: None,
+        undo: Some(name::PROPERTY_EDIT),
+        example: r#"{"i": 0, "n": 1.5}"#,
+    };
+
+    fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
+        let scene = ctx.get::<SceneSnapshot>()?;
+        let new =
+            (self.n > 0.0).then(|| gradiance_domain::optics::Optics { index: self.n }.sanitized());
+        let changes: Vec<PropertyChange> = bodies_of(ctx, scene, &self.i)?
+            .into_iter()
+            .filter_map(|id| scene.get(id))
+            .filter(|body| body.optics != new)
+            .map(|body| PropertyChange {
+                id: body.id,
+                old: PropertyValue::Optics(body.optics),
+                new: PropertyValue::Optics(new),
             })
             .collect();
         if changes.is_empty() {

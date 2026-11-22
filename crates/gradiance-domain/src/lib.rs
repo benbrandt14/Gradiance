@@ -17,6 +17,7 @@ pub mod laser;
 pub mod layers;
 pub mod motion;
 pub mod node;
+pub mod optics;
 pub mod props;
 pub mod quantity;
 pub mod ramp;

@@ -318,6 +318,7 @@ mod tests {
             groups: Vec::new(),
             fluid: None,
             motion: None,
+            optics: None,
         }
     }
 

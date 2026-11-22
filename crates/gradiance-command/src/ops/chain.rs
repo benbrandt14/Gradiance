@@ -293,6 +293,7 @@ mod tests {
             groups: Vec::new(),
             fluid: None,
             motion: None,
+            optics: None,
         };
         let (bodies, joints) = chain_records(
             &points,

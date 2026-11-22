@@ -114,6 +114,7 @@ pub fn trace_lasers(
     >,
     bodies: Query<(&Position, &Rotation, Option<&CollisionLayers>), With<Body>>,
     sensors: Query<(), With<Sensor>>,
+    optics: Query<&gradiance_domain::optics::Optics, With<Body>>,
 ) {
     for (entity, kind, attachment, transform, beam) in &mut lasers {
         let NodeKind::Laser(laser) = kind else {
@@ -154,6 +155,7 @@ pub fn trace_lasers(
             &filter,
             &skip,
             target,
+            &|e| optics.get(e).ok().map(|o| o.sanitized().index),
             path,
         );
         beam.hit = end.absorbed;

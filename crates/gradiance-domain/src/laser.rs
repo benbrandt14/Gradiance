@@ -69,9 +69,12 @@ pub struct Laser {
     pub angle: Angle,
     /// How far the beam reaches, along the whole path (m).
     pub range: Length,
-    /// How many times the beam reflects, at most (capped at
+    /// How many times the beam reflects or refracts, at most (capped at
     /// [`MAX_BOUNCES`]).
     pub bounces: u32,
+    /// The beam's colour (brief S-3). `None`: the look's laser ink.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<crate::appearance::Rgba>,
 }
 
 impl Default for Laser {
@@ -84,6 +87,7 @@ impl Default for Laser {
             angle: Angle(0.0),
             range: Length(DEFAULT_RANGE),
             bounces: DEFAULT_BOUNCES,
+            color: None,
         }
     }
 }
