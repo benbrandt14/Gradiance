@@ -9,6 +9,7 @@
 //! Ground planes need no special support here: the ground tool authors an
 //! ordinary `Static` body with a large box shape.
 
+pub mod acceleration;
 pub mod air;
 pub mod body_sync;
 pub mod buoyancy;
@@ -166,6 +167,14 @@ impl Plugin for GradiancePhysicsPlugin {
         app.add_systems(
             FixedPostUpdate,
             laser::trace_lasers.after(PhysicsSystems::Last),
+        );
+        // Accelerations (brief S-2): each body's velocity change over the
+        // step just taken; only while the sim runs, so a pause keeps them.
+        app.add_systems(
+            FixedPostUpdate,
+            acceleration::measure_accelerations
+                .after(PhysicsSystems::Last)
+                .run_if(sim_running),
         );
     }
 }

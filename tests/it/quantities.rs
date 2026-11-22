@@ -194,3 +194,45 @@ fn a_wrong_name_or_verb_is_an_error_that_says_what_to_write() {
     assert!(!log.ok, "{log:?}");
     assert!(log.output.contains("unknown quantity"), "{log:?}");
 }
+
+/// The S-2 rows read a live body: a 1 x 2 m box of density 1 has area 2 and
+/// inertia m(w² + h²)/12; dropped, it accelerates at g and its potential
+/// energy is m|g|h.
+#[test]
+fn area_inertia_potential_and_acceleration_read_a_live_body() {
+    let mut app = headless_app();
+    let record = box_record(Vec2::new(0.0, 3.0), 1.0, 2.0);
+    let id = record.id;
+    app.world_mut().write_message(SpawnBodyIntent { record });
+    step(&mut app, 10);
+    let q = |app: &mut App, name: &str| {
+        number(
+            app,
+            "quantity.read",
+            json!({"name": name, "i": id.0.to_string()}),
+        )
+    };
+    let area = q(&mut app, "area");
+    assert!((area - 2.0).abs() < 1e-3, "area {area}");
+    let mass = q(&mut app, "mass");
+    let inertia = q(&mut app, "inertia");
+    let expected = mass * (1.0 + 4.0) / 12.0;
+    assert!(
+        (inertia - expected).abs() < 1e-3 * expected,
+        "inertia {inertia} vs {expected}"
+    );
+    let g = app
+        .world()
+        .resource::<gradiance::domain::settings::SimSettings>()
+        .gravity
+        .0
+        .length();
+    let accel = q(&mut app, "acceleration");
+    assert!((accel - g).abs() < 0.01 * g, "free fall {accel} vs {g}");
+    let h = q(&mut app, "height");
+    let potential = q(&mut app, "potential-energy");
+    assert!(
+        (potential - mass * g * h).abs() < 1e-3 * (1.0 + potential.abs()),
+        "{potential}"
+    );
+}

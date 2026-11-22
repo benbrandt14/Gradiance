@@ -58,7 +58,7 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Collision layers (check/uncheck all) | present | `DepthBand` ≡ layer, Depth panel, context menu Depth |
 | Material for new objects | rejected | owner, 2026-11-21 (with presets) |
 | Colour palettes, skins | present | colour presets (`appearance.rs`), looks, chrome presets |
-| Velocity menu: show velocity / momentum / force arrows | partial | `debug.velocities` (global only). Per body, plus momentum and force: **S-2** |
+| Velocity menu: show velocity / momentum / force arrows | partial | `debug.velocities` (global only). Per body, plus momentum and force: **S-2b** |
 | Direction picker for velocity | done | **S-1** (#306: inspector Starting motion dial) |
 | File load / save / new | present | `load-scene`, `save-scene`, `new-scene`, File menu |
 | File browser with thumbnails | missing | **S-17** |
@@ -96,11 +96,11 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Material presets (wood, glass, …) | rejected | owner, 2026-11-21 |
 | Velocity: set linear and angular velocity | done | **S-1** (#306: `InitialMotion`, `set-velocity`, `set-spin`) |
 | Information: mass, position, speed, spin, momentum, angular momentum, kinetic energy | present | quantity catalog (`quantity`), signal sources, Probe panel |
-| Information: area, moment of inertia, potential energy | missing | **S-2** |
+| Information: area, moment of inertia, potential energy | done | **S-2** (catalog rows `area`, `inertia`, `potential-energy`) |
 | Collision layers | present | Depth panel, context Depth |
 | Plot vs time | present | Plot panel, signal history |
-| Plot y vs x (phase plot) | missing | **S-2** |
-| Plot acceleration | missing | **S-2** (force: `ContactForce`, `JointForce` present) |
+| Plot y vs x (phase plot) | done | **S-2** (Plot panel `x:` choice) |
+| Plot acceleration | done | **S-2** (catalog row `acceleration`; force: `ContactForce`, `JointForce`) |
 | Keystroke control | present | `defkey` (N-2) driving N-1 sinks (motor speed, thrust, …) |
 | Script menu (every property, editable) | partial | console + `reflect_grid`; settings get a grid, bodies get the hand inspector. Kept: the inspector is the edit seam |
 

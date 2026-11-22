@@ -47,6 +47,7 @@ mod nodes;
 mod op_conformance;
 mod packing;
 mod persistence;
+mod phase_plot;
 mod physics_sync;
 mod quantities;
 mod reflect_intents;

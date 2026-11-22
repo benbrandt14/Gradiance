@@ -64,6 +64,9 @@ impl PlotLayout {
 pub struct PlotConfig {
     hidden: HashSet<String>,
     layout: PlotLayout,
+    /// The series on the x axis (brief S-2: a phase plot, y against x);
+    /// `None` is time.
+    x_series: Option<String>,
 }
 
 crate::impl_panel_toggle!(PlotPanel, open);
@@ -118,6 +121,41 @@ impl Series<'_> {
     }
 }
 
+/// `y` against `x` (a phase plot, brief S-2): one point per sample time the
+/// two series share, in their display units. The bus stamps every signal
+/// recorded in one frame with that frame's time, so a pair is matched by
+/// equal stamps; a sample of one with no partner is skipped, never guessed.
+/// Pure; one walk over both histories.
+#[must_use]
+pub fn phase_points(x: &Series<'_>, y: &Series<'_>) -> Vec<[f64; 2]> {
+    let mut out = Vec::with_capacity(x.values.len().min(y.values.len()));
+    let xs: Vec<(f32, f32)> = x
+        .times
+        .iter()
+        .copied()
+        .zip(x.values.iter().copied())
+        .collect();
+    let mut j = 0;
+    let ys: Vec<(f32, f32)> = y
+        .times
+        .iter()
+        .copied()
+        .zip(y.values.iter().copied())
+        .collect();
+    for &(t, vx) in &xs {
+        while ys.get(j).is_some_and(|&(ty, _)| ty < t) {
+            j += 1;
+        }
+        if let Some(&(ty, vy)) = ys.get(j)
+            && ty.to_bits() == t.to_bits()
+        {
+            out.push([x.unit.from_si(f64::from(vx)), y.unit.from_si(f64::from(vy))]);
+            j += 1;
+        }
+    }
+    out
+}
+
 /// Every named bus signal the plotter can draw, in bus order — params,
 /// computed signals, and plot-sink bindings. The canonical sensor-ref names
 /// (`speed@<uuid>`) that `publish_sensor_refs` puts on the bus for modulation
@@ -163,9 +201,20 @@ pub fn plot_section(ui: &mut egui::Ui, plottable: &[Series<'_>], config: &mut Pl
     let mut reset = false;
     plot_header(ui, plottable, config, &mut reset);
 
-    let visible = visible_series(plottable, &config.hidden);
+    let x = config
+        .x_series
+        .as_deref()
+        .and_then(|name| plottable.iter().find(|s| s.name == name).copied());
+    let visible: Vec<Series<'_>> = visible_series(plottable, &config.hidden)
+        .into_iter()
+        .filter(|s| x.is_none_or(|x| x.name != s.name))
+        .collect();
     if visible.is_empty() {
         widgets::empty_state(ui, "No series selected — pick one above.");
+        return;
+    }
+    if let Some(x) = x {
+        phase_plot(ui, &x, &visible, reset);
         return;
     }
     match config.layout {
@@ -208,9 +257,36 @@ fn plot_header(
         .response
         .on_hover_text("show or hide individual series");
 
+        // The x axis: time, or a series (a phase plot).
+        let current = config.x_series.clone();
+        egui::ComboBox::from_id_salt("plot-x-axis")
+            .selected_text(format!("x: {}", current.as_deref().unwrap_or("time")))
+            .show_ui(ui, |ui| {
+                if ui.selectable_label(current.is_none(), "time").clicked() {
+                    config.x_series = None;
+                }
+                // `t` is the bus's own clock: the same axis as "time".
+                for series in plottable.iter().filter(|s| s.name != "t") {
+                    if ui
+                        .selectable_label(current.as_deref() == Some(series.name), series.label())
+                        .clicked()
+                    {
+                        config.x_series = Some(series.name.to_owned());
+                    }
+                }
+            })
+            .response
+            .on_hover_text("plot against time, or against another series (a phase plot)");
+
+        // A phase plot is one plot: the layouts apply to the time axis.
+        let timed = config.x_series.is_none();
         for layout in PlotLayout::ALL {
             if ui
-                .selectable_label(config.layout == layout, layout.label())
+                .add_enabled(
+                    timed,
+                    egui::Button::selectable(config.layout == layout, layout.label()),
+                )
+                .on_disabled_hover_text("a phase plot draws every series on one plot")
                 .clicked()
             {
                 config.layout = layout;
@@ -239,6 +315,31 @@ fn overlay_plot(ui: &mut egui::Ui, visible: &[Series<'_>], reset: bool) {
             for (i, series) in visible.iter().enumerate() {
                 plot_ui.line(
                     egui_plot::Line::new(series.label(), series.points())
+                        .color(colors[i])
+                        .width(1.5),
+                );
+            }
+        });
+}
+
+/// Every visible series against `x` on one plot (a phase plot): the x axis
+/// is labelled with `x`'s name and unit instead of seconds.
+fn phase_plot(ui: &mut egui::Ui, x: &Series<'_>, visible: &[Series<'_>], reset: bool) {
+    let height = ui.available_height().max(MIN_PLOT_HEIGHT);
+    let colors: Vec<_> = (0..visible.len()).map(|i| series_color(ui, i)).collect();
+    let x_label = x.label();
+    egui_plot::Plot::new("plot-phase")
+        .height(height)
+        .allow_scroll(false)
+        .x_axis_label(x_label)
+        .legend(egui_plot::Legend::default())
+        .show(ui, |plot_ui| {
+            if reset {
+                plot_ui.set_auto_bounds(true);
+            }
+            for (i, series) in visible.iter().enumerate() {
+                plot_ui.line(
+                    egui_plot::Line::new(series.label(), phase_points(x, series))
                         .color(colors[i])
                         .width(1.5),
                 );
@@ -307,10 +408,10 @@ fn is_plottable(name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{Series, is_plottable, visible_series};
+    use super::{Series, is_plottable, phase_points, visible_series};
     use gradiance_core::ids::StableId;
     use gradiance_signal::SignalSource;
-    use gradiance_units::{Dimension, DisplayUnit};
+    use gradiance_units::{Dimension, DisplayUnit, UnitPrefs};
     use std::collections::{HashSet, VecDeque};
 
     #[test]
@@ -384,5 +485,28 @@ mod tests {
         };
         assert_eq!(series.points().points().len(), 2);
         assert_eq!(series.label(), "x", "no unit, no brackets");
+    }
+
+    #[test]
+    fn a_phase_plot_pairs_samples_by_their_stamps() {
+        let unit = UnitPrefs::default().display(Dimension::Dimensionless);
+        let xt: VecDeque<f32> = [0.0, 0.1, 0.2, 0.3].into();
+        let xv: VecDeque<f32> = [0.0, 1.0, 2.0, 3.0].into();
+        // y misses the 0.1 sample and has one x does not.
+        let yt: VecDeque<f32> = [0.0, 0.2, 0.25, 0.3].into();
+        let yv: VecDeque<f32> = [5.0, 6.0, 9.0, 7.0].into();
+        let x = Series {
+            name: "x",
+            unit,
+            values: &xv,
+            times: &xt,
+        };
+        let y = Series {
+            name: "y",
+            unit,
+            values: &yv,
+            times: &yt,
+        };
+        assert_eq!(phase_points(&x, &y), [[0.0, 5.0], [2.0, 6.0], [3.0, 7.0]]);
     }
 }

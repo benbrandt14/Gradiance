@@ -30,8 +30,10 @@ as #305; earlier history in git).
   order, one PR per cycle from `claude/jolly-noether-su0a6h`. **S-1**
   authored initial velocity and spin is done (`InitialMotion`,
   `set-velocity`/`set-spin`, inspector "Starting motion"; see its Outcome).
-  **Next:** S-2 readouts and XY plots, then S-3, S-5..S-22 in number
-  order (S-4 material presets rejected by the owner, 2026-11-21, #307).
+  **S-2** readouts (area, inertia, potential energy, acceleration) and the
+  phase plot are done; its arrows are split into **S-2b**.
+  **Next:** S-2b, then S-3, S-5..S-22 in number order (S-4 material
+  presets rejected by the owner, 2026-11-21, #307).
   **Phase Q is merged (#305):** Q-2..Q-6 and Q-8 done, Q-7 returned (avian
   reports a standing joint correction as velocity; ignored repro,
   `docs/upstream-watch.md`). **Q-9** (fills lost after the chain tool, Q-1
@@ -324,7 +326,7 @@ as #305; earlier history in git).
   12. **Phase Q** (follow-ups, owner choice 2026-11-20): **Q-1** .. **Q-8**
       (done, #305; Q-7 returned to upstream, Q-9 not reproducible).
       **Phase S** sandbox parity (audit `docs/parity-audit.md`, briefs
-      S-1..S-22, S-4 rejected): **S-1** done (#306), **S-2** next.
+      S-1..S-22, S-4 rejected): **S-1** done (#306), **S-2** done, **S-2b** next.
   12b. **VectorCraft port** (planned 2026-11-21, owner direction; roadmap
       § "Unified plan"): **C-1..C-6**, **E-1..E-7**, **H-1..H-3**,
       **T-0..T-5**, then the G track below, then **B-0..B-4** (B-1 =
