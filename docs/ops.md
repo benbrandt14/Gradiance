@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 173 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 174 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -59,6 +59,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `body.spawn_circle` | `(spawn-circle x y r)` | edit | `spawn-body` | — | Author a circle body of radius r centred at (x, y), in metres; returns its handle. | `{"x": 0, "y": 3, "r": 0.5}` |
 | `body.spawn_gear` | `(spawn-gear x y r teeth)` | edit | `spawn-body` | — | Author a spur gear of pitch radius r (metres) and 6 to 64 teeth centred at (x, y); gears of equal r/teeth mesh by contact. Returns its handle. | `{"x": 0, "y": 2, "r": 0.6, "teeth": 12}` |
 | `body.spawn_ground` | `(spawn-ground x y angle)` | edit | `spawn-body` | — | Author a fixed ground half-plane through (x, y) (metres), tilted by angle radians. | `{"x": 0, "y": -2, "angle": 0.1}` |
+| `body.sponge` | `(sponge i spacing stiffness)` | edit | `sponge` | Context/Make sponge | Turn the i-th body into a sponge: circles spacing apart (0: about six across) inside its outline, joined by springs of natural frequency stiffness (Hz), as one group — one undo step. Grounds and fluid regions stay. | `{"i": 5, "spacing": 0, "stiffness": 12}` |
 | `body.subtract` | `(subtract a b)` | edit | `subtract` | Context/Subtract from first selected | Cut body b's shape out of body a (CSG subtract); b is consumed, a split result becomes pieces. | `{"a": 0, "b": 1}` |
 | `body.thruster_centre` | `(thruster-centre i)` | edit | `spawn-node` | Context/Thruster at centre | Attach a thruster at the i-th body's centre pushing along its local up with the default thrust — undoable. Returns its handle. | `{"i": 0}` |
 | `body.to_circle` | `(to-circle i)` | edit | `property-edit` | Context/To circle | Turn the i-th body into a circle of the same area, centred on its origin (circles and grounds stay) — undoable. | `{"i": 5}` |

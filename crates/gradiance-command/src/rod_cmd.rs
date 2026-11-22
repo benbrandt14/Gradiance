@@ -16,6 +16,7 @@
 
 use crate::{CommandError, GameCommand, resolve};
 use bevy::prelude::*;
+use gradiance_core::ids::StableId;
 use gradiance_scene::{BodyRecord, JointRecord};
 
 /// Spawns a rod's body (or a chain's links) and their joints atomically.
@@ -78,5 +79,43 @@ impl GameCommand for SpawnRodCommand {
 
     fn name(&self) -> &'static str {
         self.name
+    }
+}
+
+/// Turns a body into a sponge (brief S-12): deletes `target`, then spawns
+/// the lattice circles in one fresh group and the springs between them.
+/// One undo step.
+#[derive(Debug)]
+pub struct SpongeCommand {
+    /// The body the sponge replaces.
+    pub target: StableId,
+    /// The lattice circles.
+    pub bodies: Vec<BodyRecord>,
+    /// The springs between lattice neighbours.
+    pub joints: Vec<JointRecord>,
+}
+
+impl GameCommand for SpongeCommand {
+    fn apply(&mut self, world: &mut World) -> Result<(), CommandError> {
+        for body in &self.bodies {
+            body.shape.validate()?;
+        }
+        crate::spawn::DeleteCommand::new(vec![self.target]).apply(world)?;
+        // One group, minted against the world after the delete, so a redo
+        // mints the same id.
+        let group = crate::group_cmd::fresh_group_id(world);
+        let mut spawn = SpawnRodCommand {
+            bodies: self.bodies.clone(),
+            joints: self.joints.clone(),
+            name: crate::intent::name::SPONGE,
+        };
+        for body in &mut spawn.bodies {
+            body.groups = vec![group];
+        }
+        spawn.apply(world)
+    }
+
+    fn name(&self) -> &'static str {
+        crate::intent::name::SPONGE
     }
 }

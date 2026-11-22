@@ -39,3 +39,26 @@ A real soft-body solver. Pressure bodies. Rendering a skin over the lattice.
 - Gates green; `docs/ops.md` regenerated.
 
 ## Outcome
+
+Done (2026-11-22).
+
+- **Layout:** `geometry::lattice::sponge(outline, spacing)` gives the
+  `fill_polygon` points and their edges: side and upper neighbours, and
+  both diagonals of each cell. Only the largest connected part stays.
+- **Operation:** `body.sponge` (`(sponge i spacing stiffness)`), context
+  row "Make sponge". Spacing 0 picks about six circles across the smaller
+  side of the body's box (at least 0.03 m); at most 400 circles.
+  Stiffness is the springs' natural frequency in Hz (the spring tool's
+  unit); the context row uses 12 Hz, damping ratio 0.5. The circles keep
+  the body's material, colour and depth and become dynamic. Grounds and
+  fluid regions stay. Decision `sponge-stiffness-default`.
+- **Command:** `rod_cmd::SpongeCommand` deletes the body and spawns the
+  circles and springs through `SpawnRodCommand`, in one fresh group, one
+  undo step.
+- **Measured:** a 1 m box (36 circles, 110 springs) dropped 1 m squashes
+  to 80 % of its hull area and recovers to 98 % (`tests/it/sponge.rs`).
+  At 6 Hz it sagged to 87 % under its own weight, so the default is 12 Hz.
+- **Tests:** `lattice` unit tests (inside, connected, a neck keeps the
+  larger part), `tests/it/sponge.rs` (recovery within 10 %, one group,
+  undo restores the box), the undo matrix and the conformance suite.
+

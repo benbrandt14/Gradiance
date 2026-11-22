@@ -17,12 +17,13 @@ use crate::intent::{
     DeleteJointIntent, DuplicateIntent, GroupIntent, InsertIntent, LiquifyIntent, LoadSceneIntent,
     MergeIntent, NameGroupIntent, PropertyEditIntent, RedoIntent, RegroupIntent, ScaleIntent,
     SpawnBodyIntent, SpawnChainIntent, SpawnJointIntent, SpawnNodeIntent, SpawnRodIntent,
-    UndoIntent, UngroupIntent,
+    SpongeIntent, UndoIntent, UngroupIntent,
 };
 use crate::joint_cmd::{DeleteJointCommand, SpawnJointCommand};
 use crate::merge_cmd::MergeCommand;
 use crate::property::PropertyEditCommand;
 use crate::rod_cmd::SpawnRodCommand;
+use crate::rod_cmd::SpongeCommand;
 use crate::scale_cmd::ScaleCommand;
 use crate::scene_cmd::LoadSceneCommand;
 use crate::spawn::{DeleteCommand, DuplicateCommand, LiquifyCommand, SpawnCommand};
@@ -109,6 +110,11 @@ command_intents! {
     LiquifyIntent => |i| Box::new(LiquifyCommand {
         targets: i.targets,
         emitters: i.emitters,
+    }),
+    SpongeIntent => |i| Box::new(SpongeCommand {
+        target: i.target,
+        bodies: i.bodies,
+        joints: i.joints,
     }),
 }
 

@@ -85,6 +85,9 @@ pub mod name {
     /// [`LiquifyIntent`](super::LiquifyIntent) → `LiquifyCommand`
     /// (brief S-11).
     pub const LIQUIFY: &str = "liquify";
+    /// [`SpongeIntent`](super::SpongeIntent) → `SpongeCommand`
+    /// (brief S-12).
+    pub const SPONGE: &str = "sponge";
 }
 
 /// Request to spawn one fully-specified body.
@@ -120,6 +123,20 @@ pub struct LiquifyIntent {
     pub targets: Vec<StableId>,
     /// The emitter nodes that take their place.
     pub emitters: Vec<gradiance_scene::NodeRecord>,
+}
+
+/// Request to turn a body into a sponge (brief S-12): delete `target` and
+/// spawn the lattice `bodies` and their spring `joints` as one new group,
+/// one undo step.
+// Trace: dispatch.rs → SpongeCommand (rod_cmd.rs) → DeleteCommand + SpawnRodCommand; the group id is minted at apply.
+#[derive(Message, Debug, Clone, Reflect)]
+pub struct SpongeIntent {
+    /// The body to replace.
+    pub target: StableId,
+    /// The lattice circles (ids minted by the operation).
+    pub bodies: Vec<BodyRecord>,
+    /// The springs between lattice neighbours.
+    pub joints: Vec<gradiance_scene::JointRecord>,
 }
 
 /// Request to duplicate a set of bodies at an offset.

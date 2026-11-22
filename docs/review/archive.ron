@@ -5262,5 +5262,32 @@ Settings are global, so flip between the options rather than viewing them side b
             ),
             ingested_as: "S-11 (fill_from_emitters)",
         ),
+        (
+            question: (
+                id: "sponge-stiffness-default",
+                title: "Sponge stiffness and spacing defaults",
+                source: "S-12",
+                description: r#"Make sponge needs a stiffness and a spacing when the context row invokes it."#,
+                decision: true,
+                options: [
+                    (
+                        label: "12 Hz, six across",
+                        caption: r#"Springs at 12 Hz (damping 0.5); spacing 0 picks about six circles across. A 1 m sponge recovers to 98 % of its area."#,
+                    ),
+                    (
+                        label: "6 Hz",
+                        caption: r#"Softer, but a 1 m sponge sags to 87 % of its area under its own weight."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "sponge-stiffness-default",
+                title: "Sponge stiffness and spacing defaults",
+                choice: Picked("12 Hz, six across"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-12 (body.sponge)",
+        ),
     ],
 )

@@ -38,6 +38,7 @@ pub mod scene;
 pub mod sets;
 pub mod sketch;
 pub mod spawn;
+pub mod sponge;
 pub mod units;
 pub mod water;
 
@@ -233,6 +234,7 @@ impl Plugin for SceneOpsPlugin {
             quantity::register(&mut registry);
             units::register(&mut registry);
             water::register(&mut registry);
+            sponge::register(&mut registry);
         }
         app.world_mut()
             .resource_mut::<OpContextFillers>()
