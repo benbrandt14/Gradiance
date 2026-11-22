@@ -15,6 +15,7 @@ pub mod joint;
 pub mod keys;
 pub mod laser;
 pub mod layers;
+pub mod lifetime;
 pub mod motion;
 pub mod node;
 pub mod optics;

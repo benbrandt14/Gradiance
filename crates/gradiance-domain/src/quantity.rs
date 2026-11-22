@@ -59,6 +59,11 @@ pub trait BodyRead {
     fn acceleration(&self) -> Option<Vec2> {
         None
     }
+    /// Whether it started touching something during the last physics step.
+    /// Brief S-7.
+    fn hit(&self) -> Option<bool> {
+        None
+    }
 }
 
 /// What a [`PhysicalQuantity`] reads off a joint.
@@ -257,6 +262,10 @@ fn accel(b: &dyn BodyRead) -> Option<f32> {
     b.acceleration().map(Vec2::length)
 }
 
+fn hit(b: &dyn BodyRead) -> Option<f32> {
+    b.hit().map(|hit| if hit { 1.0 } else { 0.0 })
+}
+
 fn distance(a: &dyn BodyRead, b: &dyn BodyRead) -> Option<f32> {
     Some(a.position()?.distance(b.position()?))
 }
@@ -375,6 +384,13 @@ pub const QUANTITIES: &[PhysicalQuantity] = &[
         reader: Reader::Body(accel),
     },
     PhysicalQuantity {
+        name: "hit",
+        label: "hit",
+        dimension: Dimension::Dimensionless,
+        doc: "1 on the physics step a body starts touching another body, else 0: a pulse for each new contact.",
+        reader: Reader::Body(hit),
+    },
+    PhysicalQuantity {
         name: "distance",
         label: "distance",
         dimension: Dimension::Length,
@@ -447,6 +463,8 @@ pub struct BodySample {
     pub gravity: Option<Vec2>,
     /// [`BodyRead::acceleration`].
     pub acceleration: Option<Vec2>,
+    /// [`BodyRead::hit`].
+    pub hit: Option<bool>,
 }
 
 impl BodySample {
@@ -462,6 +480,7 @@ impl BodySample {
             area: body.area(),
             gravity: body.gravity(),
             acceleration: body.acceleration(),
+            hit: body.hit(),
         }
     }
 }
@@ -493,6 +512,9 @@ impl BodyRead for BodySample {
     }
     fn acceleration(&self) -> Option<Vec2> {
         self.acceleration
+    }
+    fn hit(&self) -> Option<bool> {
+        self.hit
     }
 }
 
@@ -551,6 +573,7 @@ mod tests {
             area: Some(1.5),
             gravity: Some(Vec2::new(0.0, -9.8)),
             acceleration: Some(Vec2::new(3.0, 4.0)),
+            hit: Some(true),
         }
     }
 
@@ -591,6 +614,7 @@ mod tests {
         // −2·((0, −9.8)·(3, 4))
         ("potential-energy", 78.4),
         ("acceleration", 5.0),
+        ("hit", 1.0),
         ("distance", 5.0),
         ("joint-length", 0.75),
         ("joint-angle", 0.25),

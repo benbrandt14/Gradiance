@@ -78,6 +78,10 @@ pub struct BodyRecord {
     /// Refractive index (brief S-3), if a beam passes through the body.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub optics: Option<gradiance_domain::optics::Optics>,
+    /// Removal during a run (brief S-7), if the body removes what it
+    /// touches or itself after a time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lifetime: Option<gradiance_domain::lifetime::Lifetime>,
 }
 
 impl BodyRecord {
@@ -108,6 +112,9 @@ impl BodyRecord {
                 .copied(),
             optics: entity_ref
                 .get::<gradiance_domain::optics::Optics>()
+                .copied(),
+            lifetime: entity_ref
+                .get::<gradiance_domain::lifetime::Lifetime>()
                 .copied(),
         })
     }
@@ -142,6 +149,9 @@ impl BodyRecord {
         }
         if let Some(optics) = self.optics {
             entity.insert(optics);
+        }
+        if let Some(lifetime) = self.lifetime {
+            entity.insert(lifetime);
         }
         entity.id()
     }
@@ -229,6 +239,16 @@ impl BodyRecord {
                 }
                 None => {
                     entity.remove::<gradiance_domain::optics::Optics>();
+                }
+            }
+        }
+        if self.lifetime != prev.lifetime {
+            match self.lifetime {
+                Some(lifetime) => {
+                    entity.insert(lifetime);
+                }
+                None => {
+                    entity.remove::<gradiance_domain::lifetime::Lifetime>();
                 }
             }
         }

@@ -135,11 +135,11 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Read/write position, angle | present | `body-x`, `body-y`, `body-rot`, `place` |
 | Read/write velocity | done | read via `quantity`; the starting value written by `set-velocity`/`set-spin` (**S-1**) |
 | Per-frame update / post-step | present | computed signals (`defsignal`, Tier-B kernel): the VM never runs per frame by rule |
-| On collide | partial | `ContactCount`, `ContactForce` sources; no edge event, no action on hit: **S-7** |
+| On collide | done | **S-7**: the `hit` pulse (signal source `HitPulse`, quantity `hit`), remove on contact; no script callback (the VM never runs per frame) |
 | On key | present | `defkey` |
 | On laser hit | present | laser bus signal `<name>` (N-8) |
 | On spawn | declined | spawn is a command; a script runs it already |
-| Time to live | missing | **S-7** |
+| Time to live | done | **S-7**: `set-lifetime`, inspector "remove after" |
 | Entity by id | present | verbs take an index or a `StableId` |
 | Sim time, running | present | `sim-time` |
 | Camera zoom / pan from script | missing | **S-9** |

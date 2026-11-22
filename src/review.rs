@@ -525,6 +525,7 @@ mod tests {
             fluid: None,
             motion: None,
             optics: None,
+            lifetime: None,
         }
     }
 
