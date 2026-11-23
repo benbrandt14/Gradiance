@@ -45,6 +45,8 @@ pub struct Panels<'w> {
     pub plot: ResMut<'w, crate::plot::PlotPanel>,
     /// Physics probe panel.
     pub probe: ResMut<'w, crate::probe::ProbePanel>,
+    /// Scene browser (brief S-17).
+    pub scenes: ResMut<'w, crate::scenes::ScenesPanel>,
     /// Node-graph canvas.
     pub node_graph: ResMut<'w, crate::node_graph::NodeGraph>,
     /// Object tree (outliner).
@@ -410,6 +412,7 @@ pub(crate) fn menu_label(name: &str) -> &'static str {
         "nodes" => "Node Graph",
         "console" => "Script console",
         "probe" => "Probe",
+        "scenes" => "Scenes",
         "array" => "Array",
         "optimizer" => "Optimizer",
         "settings" => "Settings",

@@ -35,3 +35,27 @@ Online browsing (S-18). Tags, search.
 - Test: save writes the sidecar; the panel lists it. Gates green.
 
 ## Outcome
+
+Done 2026-11-23 (PR on the S-16 branch).
+
+- `command::thumbnail::draw`: 256 x 160 sRGB pixels of a `SceneRecord`,
+  bodies in their fill colours on the look's backdrop, far bodies first,
+  sampled through `sdf::eval`. Drawn from the records, not captured
+  (decision `thumbnail-from-records`).
+- `persist::browser`: a save writes the sidecar `a.png` beside `a.ron`
+  (a failed thumbnail never fails the save). `list_scenes`, `rename` and
+  `trash` do the disk work; `ScenesFolder` is the folder, not saved in the
+  scene (decision `scene-browser-folder-not-saved`). Trash moves both
+  files into `.trash/` beside them, numbering a second copy (decision
+  `scene-trash-folder`).
+- Operations `scene.browse_dir`, `scene.rename`, `scene.trash` (Editor
+  seam, no undo step) queue a `SceneFileRequest` for the persist system.
+- `ui::scenes`: the Scenes panel (View menu, `(panel-show "scenes")`): a
+  grid of thumbnails; click opens (`scene.load`), F2 renames, Delete asks
+  and trashes. A hovered tile claims the keys, so Delete does not reach
+  the canvas.
+- Tests: `tests/it/scene_browser.rs` (save writes a 256 x 160 PNG, the
+  panel lists it, rename and trash move both files); unit tests in
+  `persist::browser`, `command::thumbnail`, `ui::scenes`.
+- Screenshot: `/mnt/project-files/screenshots/s17-scenes-panel.png`.
+

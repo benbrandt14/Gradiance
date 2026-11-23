@@ -65,6 +65,7 @@ mod replay;
 mod review;
 mod rod;
 mod run_read;
+mod scene_browser;
 mod script_examples;
 mod script_tools;
 mod script_units;

@@ -788,7 +788,7 @@ Added 2026-11-21 (owner: "include the others"):
 14. **S-14** shape from an image (alpha → field leaf or traced polygon) — done (traced polygon).
 15. **S-15** dispersion and white light (after S-3) — done.
 16. **S-16** brush erase mode of the sketch tool — done.
-17. **S-17** scene browser with thumbnails. 18. **S-18** share a scene
+17. **S-17** scene browser with thumbnails — done. 18. **S-18** share a scene
     as one file (no server). 19. **S-19** language choice (string table).
 20. **S-20** gamepad input on the bus. 21. **S-21** trackpad and touch
     gestures. 22. **S-22** air buoyancy.
