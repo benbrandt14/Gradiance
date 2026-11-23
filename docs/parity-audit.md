@@ -64,7 +64,7 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | File browser with thumbnails | present | Scenes panel, `scene.browse_dir`, `scene.rename`, `scene.trash` (S-17) |
 | Online scene sharing | partial | File > Share writes one `.zip` (scene, thumbnail, images), `scene.load` opens it (S-18); no server |
 | Tutorials, lessons | declined | owner, 2026-11-19 ("not an educational tool") |
-| Language choice | missing | **S-19** (string table) |
+| Language choice | partial | string table `assets/lang/en.ron`, Settings > Interface > Language; menu bar on the table, other panels ratchet (S-19) |
 | UI scale | *unverified* | egui zoom not checked |
 | Joystick | missing | **S-20** |
 | Multi-touch, trackpad gestures | missing | **S-21** |

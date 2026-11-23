@@ -5640,5 +5640,59 @@ Settings are global, so flip between the options rather than viewing them side b
             ),
             ingested_as: "S-18, persist::open_bundle",
         ),
+        (
+            question: (
+                id: "string-table-ratchet",
+                title: "The string table lands as a ratchet",
+                source: "brief S-19",
+                description: r#"The brief wants every menu, panel and operation-title label from one string table, with a scanner rejecting new literals. The UI has about 260 label literals in 23 files. The menu bar and the Scenes panel now read every label from assets/lang/en.ron. A scanner test counts the label literals left in each other file against a baseline that can only go down. Operation titles (OpMeta) stay in code for now."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Menus now, a ratchet for the rest",
+                        caption: r#"One reviewable PR; no new literal can land, and each later panel edit moves its labels and lowers the count."#,
+                    ),
+                    (
+                        label: "Every panel in one PR",
+                        caption: r#"Done at once, but a 260-string mechanical diff over 23 files is hard to review and collides with every open panel branch."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "string-table-ratchet",
+                title: "The string table lands as a ratchet",
+                choice: Picked("Menus now, a ratchet for the rest"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-19, ui::text (BASELINE)",
+        ),
+        (
+            question: (
+                id: "language-not-in-scene",
+                title: "The language is not saved in a scene",
+                source: "brief S-19",
+                description: r#"The brief calls the language workstation config. Like the unit settings, it is a resource Settings > Interface writes directly: never undone and not written into scene files. It resets to English at launch; only English ships, so nothing is lost yet."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Not saved in the scene",
+                        caption: r#"Opening a scene from someone else must not switch your menus to their language."#,
+                    ),
+                    (
+                        label: "Saved with the scene, as GridSettings",
+                        caption: r#"Kept across launches, but a shared scene would carry its author's language."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "language-not-in-scene",
+                title: "The language is not saved in a scene",
+                choice: Picked("Not saved in the scene"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-19, ui::text::Language",
+        ),
     ],
 )

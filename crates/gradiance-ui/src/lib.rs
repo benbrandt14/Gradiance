@@ -45,6 +45,7 @@ pub mod search;
 pub mod settings;
 pub mod signals;
 pub mod status_bar;
+pub mod text;
 pub mod theme;
 pub mod toolbar;
 pub mod unit_fields;
@@ -244,6 +245,8 @@ impl Plugin for GradianceUiPlugin {
         // Copy and paste of bodies (brief R-3): headless too, where a paste
         // reads the app's last copy.
         clipboard::install(app);
+        // The string table (brief S-19): headless too, so a test can switch it.
+        text::install(app);
         // The context menu's *open* logic is plain input handling — no
         // egui — so it registers headless too: the menu state and its
         // right-click picking are then testable without a renderer (the

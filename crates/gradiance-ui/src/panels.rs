@@ -149,14 +149,15 @@ mod tests {
             "search",
             "status",
         ] {
-            assert_ne!(
-                crate::menu::menu_label(name),
-                "Panel",
-                "`{name}` has no menu label"
+            let id = crate::menu::menu_label(name);
+            assert_ne!(id, "panel-unknown", "`{name}` has no menu label");
+            assert!(
+                crate::text::Strings::default().has(id),
+                "`{id}` is not in assets/lang/en.ron"
             );
         }
         // …and an unknown name falls back rather than panicking.
-        assert_eq!(crate::menu::menu_label("nope"), "Panel");
+        assert_eq!(crate::menu::menu_label("nope"), "panel-unknown");
     }
 
     /// The names are an API: lower-case, no spaces, so `(panel-show "…")`

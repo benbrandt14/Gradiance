@@ -44,6 +44,7 @@ mod joint_edit;
 mod joint_sensors;
 mod joint_stress;
 mod joints;
+mod language;
 mod lasers;
 mod lifetime;
 mod loader_fuzz;

@@ -8,6 +8,7 @@
 
 use crate::PanelRects;
 use crate::panels::PanelToggle;
+use crate::text::Strings;
 use crate::widgets;
 use bevy::app::AppExit;
 use bevy::ecs::system::SystemParam;
@@ -97,6 +98,7 @@ pub fn menu_bar(
     ids: Query<&StableId, With<Body>>,
     history: Res<gradiance_command::HistoryInfo>,
     workspaces: Res<gradiance_domain::workspace::Workspaces>,
+    strings: Res<crate::text::Strings>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
     let selected_ids: Vec<StableId> = selection
@@ -119,10 +121,10 @@ pub fn menu_bar(
         .frame(header)
         .show(&mut root, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
-                file_menu(ui, &mut writers);
-                edit_menu(ui, &mut writers, has_selection, &history);
-                view_menu(ui, &mut panels, &mut grid, &mut writers.invoke);
-                help_menu(ui, &mut about);
+                file_menu(ui, &strings, &mut writers);
+                edit_menu(ui, &strings, &mut writers, has_selection, &history);
+                view_menu(ui, &strings, &mut panels, &mut grid, &mut writers.invoke);
+                help_menu(ui, &strings, &mut about);
                 // The workspace tabs sit in the top bar after the menus, as
                 // Blender's do (brief U-10).
                 let mut picks = Vec::new();
@@ -134,33 +136,37 @@ pub fn menu_bar(
     crate::widget_registry::publish_rect("menu", bar.response.rect);
 
     let mut open = about.open;
-    egui::Window::new("About Gradiance")
+    egui::Window::new(strings.t("about-title"))
         .open(&mut open)
         .collapsible(false)
         .resizable(false)
         .show(ctx, |ui| {
-            widgets::section_header(ui, "Gradiance");
-            ui.label("An Algodoo-inspired 2.5D physics sandbox.");
-            ui.label(format!("Scene format v{FORMAT_VERSION}"));
+            widgets::section_header(ui, strings.t("about-name"));
+            ui.label(strings.t("about-tagline"));
+            ui.label(
+                strings
+                    .t("about-format")
+                    .replace("{}", &FORMAT_VERSION.to_string()),
+            );
         });
     about.open = open;
     Ok(())
 }
 
-fn file_menu(ui: &mut egui::Ui, writers: &mut MenuWriters) {
-    ui.menu_button("File", |ui| {
-        if ui.button("New scene").clicked() {
+fn file_menu(ui: &mut egui::Ui, strings: &Strings, writers: &mut MenuWriters) {
+    ui.menu_button(strings.t("menu-file"), |ui| {
+        if ui.button(strings.t("file-new")).clicked() {
             writers.invoke.write(InvokeOp::new("scene.new"));
             ui.close();
         }
-        if ui.button("Open…").clicked() {
+        if ui.button(strings.t("file-open")).clicked() {
             // An empty path: the dialog (`scene.load`, brief R-1).
             writers
                 .invoke
                 .write(InvokeOp::with("scene.load", json!({"path": ""})));
             ui.close();
         }
-        if ui.button("Insert…").clicked() {
+        if ui.button(strings.t("file-insert")).clicked() {
             // A scene file's objects added to this one (brief R-3); an
             // empty path is the dialog, `[]` keeps the file's positions.
             writers.invoke.write(InvokeOp::with(
@@ -169,7 +175,7 @@ fn file_menu(ui: &mut egui::Ui, writers: &mut MenuWriters) {
             ));
             ui.close();
         }
-        if ui.button("Import image as body…").clicked() {
+        if ui.button(strings.t("file-import_image")).clicked() {
             // An image's opaque pixels as one body (brief S-14); an empty
             // path is the dialog. One metre wide, at the origin.
             writers.invoke.write(InvokeOp::with(
@@ -179,14 +185,14 @@ fn file_menu(ui: &mut egui::Ui, writers: &mut MenuWriters) {
             ui.close();
         }
         ui.separator();
-        if ui.button("Save").clicked() {
+        if ui.button(strings.t("file-save")).clicked() {
             // An empty path: the last one, else the dialog (`scene.save`).
             writers
                 .invoke
                 .write(InvokeOp::with("scene.save", json!({"path": ""})));
             ui.close();
         }
-        if ui.button("Share…").clicked() {
+        if ui.button(strings.t("file-share")).clicked() {
             // One file with the scene, its thumbnail and its images (brief
             // S-18); an empty path is the dialog.
             writers
@@ -194,12 +200,12 @@ fn file_menu(ui: &mut egui::Ui, writers: &mut MenuWriters) {
                 .write(InvokeOp::with("scene.share", json!({"path": ""})));
             ui.close();
         }
-        if ui.button("Save snapshot").clicked() {
+        if ui.button(strings.t("file-snapshot")).clicked() {
             writers.snapshot.write(SnapshotRequest::default());
             ui.close();
         }
         ui.separator();
-        if ui.button("Quit").clicked() {
+        if ui.button(strings.t("file-quit")).clicked() {
             writers.exit.write(AppExit::Success);
             ui.close();
         }
@@ -227,18 +233,19 @@ fn step_label(verb: &str, step: Option<&'static str>) -> String {
 
 fn edit_menu(
     ui: &mut egui::Ui,
+    strings: &Strings,
     writers: &mut MenuWriters,
     has_selection: bool,
     history: &gradiance_command::HistoryInfo,
 ) {
-    ui.menu_button("Edit", |ui| {
+    ui.menu_button(strings.t("menu-edit"), |ui| {
         // Naming the pending step matters mid-run: a simulation run is one
         // undo step, so the first press after playing reads "Undo Simulate"
         // instead of appearing to ignore the edit the user has in mind.
         if ui
             .add_enabled(
                 history.undo_depth > 0,
-                egui::Button::new(step_label("Undo", history.undo_label)),
+                egui::Button::new(step_label(strings.t("edit-undo"), history.undo_label)),
             )
             .clicked()
         {
@@ -248,7 +255,7 @@ fn edit_menu(
         if ui
             .add_enabled(
                 history.redo_depth > 0,
-                egui::Button::new(step_label("Redo", history.redo_label)),
+                egui::Button::new(step_label(strings.t("edit-redo"), history.redo_label)),
             )
             .clicked()
         {
@@ -259,7 +266,7 @@ fn edit_menu(
         }
         ui.separator();
         if ui
-            .add_enabled(has_selection, egui::Button::new("Copy"))
+            .add_enabled(has_selection, egui::Button::new(strings.t("edit-copy")))
             .clicked()
         {
             writers
@@ -267,7 +274,7 @@ fn edit_menu(
                 .write_batch(key_invocations(EditorAction::Copy));
             ui.close();
         }
-        if ui.button("Paste").clicked() {
+        if ui.button(strings.t("edit-paste")).clicked() {
             // From the menu the pointer is on the menu, not the canvas: the
             // copy lands where it was copied (Ctrl+V: at the cursor).
             writers
@@ -277,7 +284,7 @@ fn edit_menu(
         }
         ui.separator();
         if ui
-            .add_enabled(has_selection, egui::Button::new("Delete selection"))
+            .add_enabled(has_selection, egui::Button::new(strings.t("edit-delete")))
             .clicked()
         {
             writers
@@ -286,7 +293,7 @@ fn edit_menu(
             ui.close();
         }
         if ui
-            .add_enabled(has_selection, egui::Button::new("Group"))
+            .add_enabled(has_selection, egui::Button::new(strings.t("edit-group")))
             .clicked()
         {
             writers
@@ -295,7 +302,7 @@ fn edit_menu(
             ui.close();
         }
         if ui
-            .add_enabled(has_selection, egui::Button::new("Ungroup"))
+            .add_enabled(has_selection, egui::Button::new(strings.t("edit-ungroup")))
             .clicked()
         {
             writers
@@ -307,7 +314,7 @@ fn edit_menu(
         // No key: hotkeys are not settled (brief N-9).
         for (label, id) in MIRROR_ROWS {
             if ui
-                .add_enabled(has_selection, egui::Button::new(label))
+                .add_enabled(has_selection, egui::Button::new(strings.t(label)))
                 .clicked()
             {
                 writers
@@ -319,15 +326,15 @@ fn edit_menu(
     });
 }
 
-/// Edit ▸ Mirror rows: the label and the operation each invokes on the
-/// selection (brief N-9); the body context menu reads the same table
-/// (brief Q-3).
+/// Edit ▸ Mirror rows: the label's text id and the operation each invokes
+/// on the selection (brief N-9); the body context menu reads the same
+/// table (brief Q-3).
 pub(crate) const MIRROR_ROWS: [(&str, &str); 2] = [
-    ("Mirror horizontally", "body.mirror_h"),
-    ("Mirror vertically", "body.mirror_v"),
+    ("edit-mirror_h", "body.mirror_h"),
+    ("edit-mirror_v", "body.mirror_v"),
 ];
 
-/// View-menu camera rows (brief S-9): label, operation, params, key. The
+/// View-menu camera rows (brief S-9): label text id, operation, params, key. The
 /// `.` key invokes the first row's operation through `KEY_OPS`.
 type CameraRow = (
     &'static str,
@@ -337,19 +344,24 @@ type CameraRow = (
 );
 pub(crate) const CAMERA_ROWS: [CameraRow; 4] = [
     (
-        "Frame selection",
+        "view-frame_selection",
         "camera.frame",
         || json!({"targets": ["selection"]}),
         ".",
     ),
-    ("Frame all", "camera.frame", || json!({"targets": []}), ""),
     (
-        "Follow selection",
+        "view-frame_all",
+        "camera.frame",
+        || json!({"targets": []}),
+        "",
+    ),
+    (
+        "view-follow",
         "camera.follow",
         || json!({"i": "selection"}),
         "",
     ),
-    ("Stop following", "camera.follow", || json!({"i": -1}), ""),
+    ("view-unfollow", "camera.follow", || json!({"i": -1}), ""),
 ];
 
 /// The View menu, as a table over the panel registry.
@@ -364,24 +376,30 @@ pub(crate) const CAMERA_ROWS: [CameraRow; 4] = [
 /// and floating windows, then scene overlays.
 fn view_menu(
     ui: &mut egui::Ui,
+    strings: &Strings,
     panels: &mut Panels,
     grid: &mut GridSettings,
     invoke: &mut MessageWriter<InvokeOp>,
 ) {
     // Where a horizontal rule goes, by row index. Presentation, not structure.
     const GROUPS: [usize; 2] = [5, 10];
-    ui.menu_button("View", |ui| {
+    ui.menu_button(strings.t("menu-view"), |ui| {
         let mut rows = panels.named();
         for (i, (name, panel)) in rows.iter_mut().enumerate() {
             if GROUPS.contains(&i) {
                 ui.separator();
             }
-            toggle_item(ui, menu_label(name), shortcut_for(name), &mut **panel);
+            toggle_item(
+                ui,
+                strings.t(menu_label(name)),
+                shortcut_for(name),
+                &mut **panel,
+            );
         }
         ui.separator();
         for (label, id, params, shortcut) in CAMERA_ROWS {
             if ui
-                .add(egui::Button::new(label).shortcut_text(shortcut))
+                .add(egui::Button::new(strings.t(label)).shortcut_text(shortcut))
                 .clicked()
             {
                 invoke.write(InvokeOp::with(id, params()));
@@ -389,9 +407,11 @@ fn view_menu(
             }
         }
         ui.separator();
-        ui.checkbox(&mut grid.visible, "Grid");
-        ui.checkbox(&mut panels.debug.show_fields, "Field overlay");
-        ui.menu_button("Debug", |ui| debug_menu(ui, &panels.debug, invoke));
+        ui.checkbox(&mut grid.visible, strings.t("view-grid"));
+        ui.checkbox(&mut panels.debug.show_fields, strings.t("view-fields"));
+        ui.menu_button(strings.t("menu-debug"), |ui| {
+            debug_menu(ui, strings, &panels.debug, invoke);
+        });
     });
 }
 
@@ -399,35 +419,49 @@ fn view_menu(
 /// over [`DEBUG_TOGGLES`]. A click invokes the toggle's operation, so the
 /// menu and the `debug.*` verbs are one path. No key: the keymap is not
 /// settled.
-fn debug_menu(ui: &mut egui::Ui, debug: &DebugSettings, invoke: &mut MessageWriter<InvokeOp>) {
+fn debug_menu(
+    ui: &mut egui::Ui,
+    strings: &Strings,
+    debug: &DebugSettings,
+    invoke: &mut MessageWriter<InvokeOp>,
+) {
     for row in DEBUG_TOGGLES {
         let mut on = (row.get)(debug);
-        if ui.checkbox(&mut on, row.label).changed() {
+        // The row's label: the table's `debug-<op id>`, else its own.
+        let id = format!("debug-{}", row.id);
+        let label = if strings.has(&id) {
+            strings.t(&id)
+        } else {
+            row.label
+        };
+        if ui.checkbox(&mut on, label).changed() {
             invoke.write(InvokeOp::with(row.id, json!({ "on": on })));
         }
     }
 }
 
-/// The menu label for a registry name. Names are an API and stay stable; labels
-/// are prose and may be retitled, which is why they are not the same string.
+/// The text id of a registry name's menu label (`panel-<name>`; an unknown
+/// name gets `panel-unknown`). Names are an API and stay stable; labels are
+/// prose in the string table and may be retitled, which is why they are not
+/// the same string.
 pub(crate) fn menu_label(name: &str) -> &'static str {
     match name {
-        "outliner" => "Outliner",
-        "groups" => "Groups",
-        "properties" => "Properties",
-        "depth" => "Depth",
-        "plot" => "Plot",
-        "nodes" => "Node Graph",
-        "console" => "Script console",
-        "probe" => "Probe",
-        "scenes" => "Scenes",
-        "array" => "Array",
-        "optimizer" => "Optimizer",
-        "settings" => "Settings",
-        "review" => "Review",
-        "search" => "Search operations",
-        "status" => "Status bar",
-        _ => "Panel",
+        "outliner" => "panel-outliner",
+        "groups" => "panel-groups",
+        "properties" => "panel-properties",
+        "depth" => "panel-depth",
+        "plot" => "panel-plot",
+        "nodes" => "panel-nodes",
+        "console" => "panel-console",
+        "probe" => "panel-probe",
+        "scenes" => "panel-scenes",
+        "array" => "panel-array",
+        "optimizer" => "panel-optimizer",
+        "settings" => "panel-settings",
+        "review" => "panel-review",
+        "search" => "panel-search",
+        "status" => "panel-status",
+        _ => "panel-unknown",
     }
 }
 
@@ -466,9 +500,9 @@ fn toggle_item(ui: &mut egui::Ui, label: &str, shortcut: &str, panel: &mut dyn P
     }
 }
 
-fn help_menu(ui: &mut egui::Ui, about: &mut AboutWindow) {
-    ui.menu_button("Help", |ui| {
-        if ui.button("About Gradiance").clicked() {
+fn help_menu(ui: &mut egui::Ui, strings: &Strings, about: &mut AboutWindow) {
+    ui.menu_button(strings.t("menu-help"), |ui| {
+        if ui.button(strings.t("help-about")).clicked() {
             about.open = true;
             ui.close();
         }

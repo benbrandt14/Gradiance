@@ -11,6 +11,7 @@
 //! The listing is read from disk when the folder changes and once a second
 //! while the panel shows. A thumbnail is decoded once per file change.
 
+use crate::text::Strings;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 use gradiance_core::scene_folder::SceneFolder;
@@ -117,6 +118,7 @@ pub fn scenes_window(
     scene_folder: Option<Res<SceneFolder>>,
     time: Res<Time<Real>>,
     mut invoke: MessageWriter<InvokeOp>,
+    strings: Res<Strings>,
 ) -> Result {
     if !panel.open {
         return Ok(());
@@ -126,15 +128,15 @@ pub fn scenes_window(
     panel.refresh(&dir, time.elapsed_secs_f64());
     let mut actions = Vec::new();
     let mut open = true;
-    egui::Window::new("Scenes")
+    egui::Window::new(strings.t("panel-scenes"))
         .open(&mut open)
         .default_width(440.0)
         .show(&ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.label(dir.display().to_string());
                 if ui
-                    .small_button("Folder")
-                    .on_hover_text("show the scene files in another folder")
+                    .small_button(strings.t("scenes-folder"))
+                    .on_hover_text(strings.t("scenes-folder-hint"))
                     .clicked()
                 {
                     actions.push(Action::Browse);
@@ -142,19 +144,19 @@ pub fn scenes_window(
             });
             ui.separator();
             if panel.entries.is_empty() {
-                crate::widgets::empty_state(ui, "No scene files here. Save one to see it.");
+                crate::widgets::empty_state(ui, strings.t("scenes-empty"));
             }
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     let entries = panel.entries.clone();
                     for entry in &entries {
-                        tile(ui, &ctx, &mut panel, entry, &mut actions);
+                        tile(ui, &ctx, &strings, &mut panel, entry, &mut actions);
                     }
                 });
             });
         });
     panel.open = open;
-    confirm_window(&ctx, &mut panel, &mut actions);
+    confirm_window(&ctx, &strings, &mut panel, &mut actions);
     for action in actions {
         invoke.write(match action {
             Action::Open(path) => {
@@ -177,6 +179,7 @@ pub fn scenes_window(
 fn tile(
     ui: &mut egui::Ui,
     ctx: &egui::Context,
+    strings: &Strings,
     panel: &mut ScenesPanel,
     entry: &SceneEntry,
     actions: &mut Vec<Action>,
@@ -193,9 +196,9 @@ fn tile(
                     .sense(egui::Sense::click())
                     .corner_radius(2.0),
             ),
-            None => ui.add_sized(TILE, egui::Button::new("no thumbnail")),
+            None => ui.add_sized(TILE, egui::Button::new(strings.t("scenes-no_thumbnail"))),
         }
-        .on_hover_text("click: open; F2: rename; Delete: move to the trash");
+        .on_hover_text(strings.t("scenes-tile-hint"));
         if response.clicked() {
             actions.push(Action::Open(entry.path.clone()));
         }
@@ -241,7 +244,12 @@ fn rename_row(
 }
 
 /// The trash confirm: Move to trash, or Cancel.
-fn confirm_window(ctx: &egui::Context, panel: &mut ScenesPanel, actions: &mut Vec<Action>) {
+fn confirm_window(
+    ctx: &egui::Context,
+    strings: &Strings,
+    panel: &mut ScenesPanel,
+    actions: &mut Vec<Action>,
+) {
     let Some(path) = panel.confirm.clone() else {
         return;
     };
@@ -249,20 +257,18 @@ fn confirm_window(ctx: &egui::Context, panel: &mut ScenesPanel, actions: &mut Ve
         .file_stem()
         .map_or_else(String::new, |s| s.to_string_lossy().into_owned());
     let mut decided = false;
-    egui::Window::new("Move to trash")
+    egui::Window::new(strings.t("scenes-trash-title"))
         .collapsible(false)
         .resizable(false)
         .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
         .show(ctx, |ui| {
-            ui.label(format!(
-                "Move \"{name}\" and its thumbnail to the .trash folder?"
-            ));
+            ui.label(strings.t("scenes-trash-ask").replace("{}", &name));
             ui.horizontal(|ui| {
-                if ui.button("Move to trash").clicked() {
+                if ui.button(strings.t("scenes-trash-yes")).clicked() {
                     actions.push(Action::Trash(path.clone()));
                     decided = true;
                 }
-                if ui.button("Cancel").clicked() {
+                if ui.button(strings.t("scenes-trash-no")).clicked() {
                     decided = true;
                 }
             });
