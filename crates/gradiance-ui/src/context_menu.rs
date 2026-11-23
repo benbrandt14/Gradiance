@@ -145,6 +145,8 @@ pub struct PanelMenu<'w> {
     depth: ResMut<'w, crate::depth_panel::DepthPanel>,
     optimizer: crate::optimizer::OptimizerPanel<'w>,
     array: ResMut<'w, crate::array_panel::ArrayWindow>,
+    /// The string table (brief S-19): the mirror rows' labels.
+    strings: Res<'w, crate::text::Strings>,
 }
 
 /// The menu's writers, bundled into one `SystemParam` to keep
@@ -739,6 +741,7 @@ pub fn context_menu(
                 }
                 // Mirror, from the Edit menu's table (brief Q-3; no key).
                 for (label, id) in crate::menu::MIRROR_ROWS {
+                    let label = panels.strings.t(label);
                     if row_enabled(ui, label, "", !selected_ids.is_empty()) {
                         writers
                             .invoke

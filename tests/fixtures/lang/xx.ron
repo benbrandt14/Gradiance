@@ -1,0 +1,7 @@
+// A test string table (brief S-19): a few menu ids, marked so a test can
+// see the switch. Not shipped: it lives under tests/fixtures.
+{
+    "menu-file": "[File]",
+    "panel-probe": "[Probe]",
+    "file-save": "[Save]",
+}

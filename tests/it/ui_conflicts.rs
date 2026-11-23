@@ -31,4 +31,8 @@ fn panel_systems_have_no_conflicting_params() {
     assert_initializes(gradiance::ui::joint_inspector::joint_inspector);
     // apply_scene_viewport mutates the camera viewport from the panel rects.
     assert_initializes(gradiance::ui::apply_scene_viewport);
+    // The Scenes panel (S-17) and the settings window's language picker
+    // (S-19, a bundled param).
+    assert_initializes(gradiance::ui::scenes::scenes_window);
+    assert_initializes(gradiance::ui::settings::settings_window);
 }

@@ -82,6 +82,7 @@ pub fn settings_window(
     mut chrome: ResMut<gradiance_domain::settings::ChromeSettings>,
     mut units: ResMut<gradiance_domain::settings::UnitSettings>,
     readouts: DebugReadouts,
+    mut language: crate::text::LanguageParams,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
 
@@ -146,6 +147,8 @@ pub fn settings_window(
                     interface_tab(ui, &mut chrome);
                     ui.separator();
                     units_section(ui, &mut units);
+                    ui.separator();
+                    crate::text::language_section(ui, &mut language);
                 }
             }
         });

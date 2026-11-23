@@ -19,6 +19,10 @@ use gradiance_core::messages::drain;
 use gradiance_scene::{PersistError, SceneRecord, from_ron, to_ron};
 use std::path::{Path, PathBuf};
 
+/// The RON crate, for the layers above that read a RON data file (the UI's
+/// string tables, brief S-19) without a dependency edge of their own.
+pub use ron;
+
 pub mod browser;
 pub mod bundle;
 pub mod ops;
