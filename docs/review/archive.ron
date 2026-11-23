@@ -5397,5 +5397,59 @@ Settings are global, so flip between the options rather than viewing them side b
             ),
             ingested_as: "S-14 (polygonize_alpha, scene.import_image)",
         ),
+        (
+            question: (
+                id: "white-laser-full-traces",
+                title: "A white laser traces each colour from its origin",
+                source: "brief S-15",
+                description: r#"The brief forks a white ray into k coloured rays at its first refraction. The tracer instead runs the whole trace once per colour (7) plus the reference, and the overlay draws the corners they share in white. Before the split the casts repeat, at most bounces + 1 each."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Trace each colour in full",
+                        caption: r#"Simplest: trace_optics stays one walk, and the cost is at most 8 traces per white laser per step, inside the brief's k = 7 cap."#,
+                    ),
+                    (
+                        label: "Fork at the first refraction",
+                        caption: r#"Fewer casts before the split, but trace_optics needs a branching walk and a second buffer layout."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "white-laser-full-traces",
+                title: "A white laser traces each colour from its origin",
+                choice: Picked("Trace each colour in full"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-15, physics::laser (LaserBeam.spectrum, split)",
+        ),
+        (
+            question: (
+                id: "glass-dispersion-default",
+                title: "A new transparent body has crown glass dispersion",
+                source: "brief S-15",
+                description: r#"A body made transparent by the inspector or set-index starts with Cauchy B = 0.004 (crown glass). A file from before S-15 reads 0. Only a white laser sees the dispersion, so a coloured beam traces as before."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Crown glass, B = 0.004",
+                        caption: r#"A white laser through a new prism shows a spectrum with no extra step."#,
+                    ),
+                    (
+                        label: "No dispersion, B = 0",
+                        caption: r#"A prism shows white light until the person sets the dispersion."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "glass-dispersion-default",
+                title: "A new transparent body has crown glass dispersion",
+                choice: Picked("Crown glass, B = 0.004"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-15, domain::optics (Optics::default, of_index)",
+        ),
     ],
 )

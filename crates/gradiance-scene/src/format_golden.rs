@@ -203,6 +203,7 @@ pub(crate) fn every_quantity_scene() -> SceneRecord {
                     range: q("12.5"),
                     bounces: 3,
                     color: None,
+                    white: false,
                 }),
                 appearance: Appearance::default(),
             },

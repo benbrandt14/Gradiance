@@ -460,3 +460,68 @@ fn a_prism_deviates_a_beam_by_the_minimum_deviation_angle() {
     let back = (path[2] - path[1]).normalize();
     assert!(back.x < 0.0, "reflected back left: {path:?}");
 }
+
+/// A white laser through a dispersive prism (brief S-15): every colour
+/// shares the beam up to the prism, then the colours fan out, violet bent
+/// most; a coloured laser through the same prism keeps one path.
+#[test]
+fn a_white_laser_through_a_prism_makes_a_spectrum() {
+    let mut app = headless_app();
+    zero_gravity(&mut app);
+    let h = 3_f32.sqrt();
+    let mut prism = box_record(Vec2::ZERO, 1.0, 1.0);
+    prism.shape = ShapeDef::Polygon {
+        outline: vec![
+            Vec2::new(-1.0, -h / 3.0),
+            Vec2::new(1.0, -h / 3.0),
+            Vec2::new(0.0, 2.0 * h / 3.0),
+        ],
+        holes: Vec::new(),
+    };
+    prism.physics.rigid_body = RigidBody::Static;
+    let prism_id = spawn_body(&mut app, prism);
+    invoke(
+        app.world_mut(),
+        "body.set_dispersion",
+        json!({"i": prism_id.0.to_string(), "b": 0.01}),
+    )
+    .unwrap();
+    let rise = 10_f32.to_radians();
+    let dir = Vec2::from_angle(rise);
+    let laser = spawn_laser(
+        &mut app,
+        Vec2::new(-0.5, h / 6.0) - dir * 2.0,
+        rise,
+        "rainbow",
+        None,
+    );
+    step(&mut app, 2);
+    assert!(beam(&app, laser).spectrum.is_empty(), "a coloured laser");
+    let before = kind_of(&app, laser);
+    let NodeKind::Laser(mut white) = before.clone() else {
+        panic!("a laser");
+    };
+    white.white = true;
+    app.world_mut().write_message(PropertyEditIntent {
+        changes: vec![PropertyChange {
+            id: laser,
+            old: PropertyValue::NodeKind(before),
+            new: PropertyValue::NodeKind(NodeKind::Laser(white)),
+        }],
+    });
+    step(&mut app, 2);
+    let beam = beam(&app, laser);
+    assert_eq!(beam.spectrum.len(), 7);
+    assert_eq!(beam.split, 2, "white to the prism: {:?}", beam.path);
+    let heading = |path: &[Vec2]| {
+        let n = path.len();
+        let d = path[n - 1] - path[n - 2];
+        d.y.atan2(d.x).to_degrees()
+    };
+    let red = heading(&beam.spectrum[0]);
+    let violet = heading(&beam.spectrum[6]);
+    assert!(
+        red - violet > 0.5,
+        "violet bends most: red {red}, violet {violet}"
+    );
+}

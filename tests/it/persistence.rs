@@ -146,6 +146,7 @@ fn body_strategy() -> impl Strategy<Value = BodyRecord> {
                     }),
                     optics: (y > 0.0).then_some(gradiance::domain::optics::Optics {
                         index: 1.0 + x.abs(),
+                        dispersion: y.abs() * 0.001,
                     }),
                     lifetime: (x < 0.0).then_some(gradiance::domain::lifetime::Lifetime {
                         remove_on_contact: y > 0.0,

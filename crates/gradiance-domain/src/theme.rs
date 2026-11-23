@@ -411,6 +411,18 @@ pub const ARROW_MOMENTUM: Rgba = Rgba::rgb(0.35, 0.72, 0.95);
 /// A body's net-force arrow (brief S-2b).
 pub const ARROW_FORCE: Rgba = Rgba::rgb(0.92, 0.36, 0.32);
 
+/// A white laser's colours (brief S-15), red to violet, at
+/// `optics::SPECTRUM_WAVELENGTHS`.
+pub const SPECTRUM: [Rgba; 7] = [
+    Rgba::rgb(0.92, 0.12, 0.10),
+    Rgba::rgb(0.98, 0.50, 0.08),
+    Rgba::rgb(0.98, 0.88, 0.12),
+    Rgba::rgb(0.20, 0.82, 0.25),
+    Rgba::rgb(0.10, 0.55, 0.95),
+    Rgba::rgb(0.25, 0.25, 0.90),
+    Rgba::rgb(0.55, 0.20, 0.85),
+];
+
 /// Particle water (brief S-10): its discs, and a water emitter's outline
 /// (brief S-11) at a lower alpha.
 pub const PARTICLE_WATER: Rgba = Rgba::rgb(0.25, 0.55, 0.95);
