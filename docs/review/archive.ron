@@ -5775,5 +5775,86 @@ Settings are global, so flip between the options rather than viewing them side b
             ),
             ingested_as: "crates/gradiance-domain/src/pad.rs",
         ),
+        (
+            question: (
+                id: "scroll-unit-splits-wheel-and-trackpad",
+                title: "How the camera tells a wheel from a trackpad",
+                source: "S-21",
+                description: r#"A two-finger trackpad drag arrives as scroll. A wheel notch also arrives as scroll, and it zooms."#,
+                decision: true,
+                options: [
+                    (
+                        label: "By the scroll unit",
+                        caption: r#"Pixel-unit scroll pans and Ctrl+pixel scroll zooms. Line-unit scroll zooms as before. macOS and Wayland trackpads pan; Windows and X11 touchpads still zoom, because they scroll in lines."#,
+                    ),
+                    (
+                        label: "A setting to choose",
+                        caption: r#"Adds a saved camera field and a settings row for a guess most people never change."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "scroll-unit-splits-wheel-and-trackpad",
+                title: "How the camera tells a wheel from a trackpad",
+                choice: Picked("By the scroll unit"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "crates/gradiance-interaction/src/camera_gestures.rs",
+        ),
+        (
+            question: (
+                id: "two-finger-turn-rolls",
+                title: "What a two-finger turn does to the camera",
+                source: "S-21",
+                description: r#"The brief says a two-finger rotate orbits. A turn on a flat screen has one axis: the view axis."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Roll the view",
+                        caption: r#"The scene turns with the fingers, about the view axis. Home glides the roll back to 0. Middle-drag keeps the yaw and pitch orbit."#,
+                    ),
+                    (
+                        label: "Yaw orbit",
+                        caption: r#"A turn of the fingers would swing the scene out of the plane, which does not follow the fingers."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "two-finger-turn-rolls",
+                title: "What a two-finger turn does to the camera",
+                choice: Picked("Roll the view"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "crates/gradiance-interaction/src/camera_gestures.rs",
+        ),
+        (
+            question: (
+                id: "gesture-zoom-not-scaled",
+                title: "Whether CameraSettings scales gesture zoom",
+                source: "S-21",
+                description: r#"A pinch and a spread are analog: the scene follows the fingers."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Not scaled",
+                        caption: r#"A spread of 2x zooms 2x, so the point under the fingers stays under them. Only Ctrl+trackpad scroll uses zoom_step, like a wheel."#,
+                    ),
+                    (
+                        label: "Scaled by zoom_step",
+                        caption: r#"The scene would slide under the fingers."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "gesture-zoom-not-scaled",
+                title: "Whether CameraSettings scales gesture zoom",
+                choice: Picked("Not scaled"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "crates/gradiance-interaction/src/camera_gestures.rs",
+        ),
     ],
 )

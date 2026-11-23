@@ -26,7 +26,7 @@
 //! saved with the scene.
 
 use crate::PointerOverUi;
-use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll};
+use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseScrollUnit};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use gradiance_core::ids::{IdIndex, StableId};
@@ -357,31 +357,78 @@ pub fn pan_and_zoom_camera(
     }
 
     // Zoom toward the cursor (plane-anchored, works at any tilt): ortho
-    // scales the projection, perspective dollies the rig.
-    let notches = scroll.delta.y;
+    // scales the projection, perspective dollies the rig. A wheel scrolls
+    // in lines; a trackpad scrolls in pixels and pans instead
+    // (`camera_gestures`).
+    let notches = if scroll.unit == MouseScrollUnit::Line {
+        scroll.delta.y
+    } else {
+        0.0
+    };
     if notches.abs() > f32::EPSILON && !over_ui.0 {
-        let factor = feel.zoom_step.powf(notches);
-        let new_wpp = (wpp * factor).clamp(MIN_SCALE, MAX_SCALE);
-        if (new_wpp - wpp).abs() > f32::EPSILON {
-            let anchor = windows
-                .iter()
-                .next()
-                .and_then(Window::cursor_position)
-                .and_then(|cursor| plane_point(camera, global, cursor));
-            if let Some(anchor) = anchor {
-                let ratio = new_wpp / wpp;
-                let a = anchor.extend(rig.focus.z);
-                rig.focus = a + (rig.focus - a) * ratio;
-            }
-            match &mut *projection {
-                Projection::Orthographic(o) => o.scale = new_wpp,
-                Projection::Perspective(p) => {
-                    rig.distance = new_wpp * viewport_height / (2.0 * (p.fov * 0.5).tan());
-                }
-                Projection::Custom(_) => {}
-            }
-        }
+        let cursor = windows.iter().next().and_then(Window::cursor_position);
+        let new_wpp = wpp * feel.zoom_step.powf(notches);
+        zoom_about(
+            &mut rig,
+            &mut projection,
+            (camera, global),
+            cursor,
+            (wpp, new_wpp),
+            viewport_height,
+        );
     }
+}
+
+/// Zooms the rig from `wpp` to `new_wpp` world metres per pixel (clamped
+/// to the zoom limits), keeping the sandbox-plane point under `anchor`
+/// (screen pixels) still. No anchor, or one off the plane, zooms about the
+/// focus. Ortho scales the projection, perspective dollies the rig.
+pub(crate) fn zoom_about(
+    rig: &mut CameraRig,
+    projection: &mut Projection,
+    (camera, global): (&Camera, &GlobalTransform),
+    anchor: Option<Vec2>,
+    (wpp, new_wpp): (f32, f32),
+    viewport_height: f32,
+) {
+    let new_wpp = new_wpp.clamp(MIN_SCALE, MAX_SCALE);
+    if !new_wpp.is_finite() || (new_wpp - wpp).abs() <= f32::EPSILON {
+        return;
+    }
+    if let Some(anchor) = anchor.and_then(|cursor| plane_point(camera, global, cursor)) {
+        let ratio = new_wpp / wpp;
+        let a = anchor.extend(rig.focus.z);
+        rig.focus = a + (rig.focus - a) * ratio;
+    }
+    match projection {
+        Projection::Orthographic(o) => o.scale = new_wpp,
+        Projection::Perspective(p) => {
+            rig.distance = new_wpp * viewport_height / (2.0 * (p.fov * 0.5).tan());
+        }
+        Projection::Custom(_) => {}
+    }
+}
+
+/// The current world metres per screen pixel of the rig and projection.
+pub(crate) fn current_world_per_pixel(
+    projection: &Projection,
+    rig: &CameraRig,
+    viewport_height: f32,
+) -> f32 {
+    world_per_pixel(projection, rig.distance, viewport_height)
+}
+
+/// Pans the rig by `drag` screen pixels the way a right-drag does (X
+/// right, Y down: the scene moves with the drag) and stops any follow or
+/// view glide.
+pub(crate) fn pan_by_pixels(rig: &mut CameraRig, drag: Vec2, wpp: f32) {
+    if drag == Vec2::ZERO {
+        return;
+    }
+    let delta = Vec2::new(-drag.x, drag.y) * wpp;
+    rig.focus += rig.rotation() * delta.extend(0.0);
+    rig.follow = None;
+    rig.view = None;
 }
 
 /// The size of the primary window in logical pixels, or 1600 x 900 when
