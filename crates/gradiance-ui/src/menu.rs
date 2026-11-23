@@ -186,6 +186,14 @@ fn file_menu(ui: &mut egui::Ui, writers: &mut MenuWriters) {
                 .write(InvokeOp::with("scene.save", json!({"path": ""})));
             ui.close();
         }
+        if ui.button("Share…").clicked() {
+            // One file with the scene, its thumbnail and its images (brief
+            // S-18); an empty path is the dialog.
+            writers
+                .invoke
+                .write(InvokeOp::with("scene.share", json!({"path": ""})));
+            ui.close();
+        }
         if ui.button("Save snapshot").clicked() {
             writers.snapshot.write(SnapshotRequest::default());
             ui.close();
