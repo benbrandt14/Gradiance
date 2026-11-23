@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 156 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 186 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -23,36 +23,51 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `body.cut` | `(cut ax ay bx by width)` | edit | `cut` | — | Cut every body the stroke a→b passes through, at the given width (metres). | `{"ax": -2, "ay": 1, "bx": 2, "by": 1, "width": 0.05}` |
 | `body.delete` | `(delete i)` | edit | `delete` | Edit/Delete selection, Delete | Delete the i-th body (id order, same index as body-x) — undoable. | `{"i": 0}` |
 | `body.density` | `(body-density i)` | query | — | — | Mass density of the i-th body. | `{"i": 0}` |
+| `body.erase` | `(erase path width)` | edit | `erase` | — | Erase a brush stroke width wide along path [x0 y0 x1 y1 …] from every body it touches, like the sketch tool with Alt held: a body the stroke divides becomes pieces, one it covers goes. Unlike cut, a stroke may end inside a body and leave a notch. | `{"path": [6.4, 0.6, 7.6, 1.4], "width": 0.1}` |
 | `body.fillet_merge` | `(fillet-merge a b radius)` | edit | `fillet-merge` | Context/Merge with fillet | Fuse bodies a and b into one with a smooth fillet of radius metres where they meet (CSG smooth union); a survives. Bridges a gap under radius/2. Errors unless radius > 0. | `{"a": 0, "b": 1, "radius": 0.25}` |
 | `body.friction` | `(body-friction i)` | query | — | — | Coulomb friction of the i-th body. | `{"i": 0}` |
 | `body.index_at` | `(body-index-at x y)` | query | — | — | Index of a body whose shape contains (x, y) (first in id order); -1 if none. | `{"x": 0, "y": 1}` |
 | `body.intersect` | `(intersect a b)` | edit | `intersect` | Context/Intersect | Keep only where bodies a and b overlap (CSG intersect) on a; b is consumed. | `{"a": 0, "b": 1}` |
 | `body.is_static` | `(body-static? i)` | query | — | — | Whether the i-th body is static (1) or not (0). | `{"i": 0}` |
+| `body.liquify` | `(liquify i)` | edit | `liquify` | Context/Liquify | Turn the i-th body into particle water of the same area (grounds and fluid regions stay): it fills when the sim plays — one undo step. | `{"i": 0}` |
+| `body.loosen` | `(loosen i)` | edit | `delete` | Context/Loosen | Drop every joint of the i-th body (the bodies stay) — one undo step. | `{"i": 3}` |
+| `body.make_gear` | `(make-gear i [teeth])` | edit | `property-edit` | Context/Make gear | Turn the i-th body, a circle, into a spur gear of the same pitch radius (teeth absent: one tooth size for every made gear, so they mesh) — undoable. | `{"i": 0, "teeth": 12}` |
 | `body.merge` | `(merge a b)` | edit | `merge` | Context/Merge into one body | Fuse bodies a and b into one CSG union; a survives. | `{"a": 0, "b": 1}` |
 | `body.mirror_h` | `(mirror-h targets)` | edit | `mirror` | Edit/Mirror horizontally | Mirror the listed bodies left to right across the vertical line through their centre, with their joints and nodes — one undo step. | `{"targets": [0, 1]}` |
 | `body.mirror_v` | `(mirror-v targets)` | edit | `mirror` | Edit/Mirror vertically | Mirror the listed bodies top to bottom across the horizontal line through their centre, with their joints and nodes — one undo step. | `{"targets": [0, 1]}` |
 | `body.nearest_at` | `(nearest-at x y)` | query | — | — | Index of the body whose centre is nearest (x, y); -1 if none. | `{"x": 0, "y": 1}` |
 | `body.nearest_dist` | `(nearest-dist x y)` | query | — | — | Distance from (x, y) to the nearest body centre; -1 if the scene is empty. | `{"x": 0, "y": 1}` |
+| `body.pin_centre` | `(pin-centre i)` | edit | `spawn-joint` | Context/Pin at centre | Hinge the i-th body to the world at its centre, so it can only spin — undoable. Returns the joint's handle. | `{"i": 0}` |
 | `body.place` | `(place i x y angle)` | edit | `commit-transform` | — | Move the i-th body to (x, y) and rotate it to `angle` radians — one undo step. | `{"i": 0, "x": 1.5, "y": 0.25, "angle": 0.5}` |
+| `body.place_texture` | `(place-texture i x y width angle)` | edit | `property-edit` | — | Place the i-th body's image: centre (x, y) in the body's frame, width metres wide, turned by angle — undoable. A body without an image is left as it is. | `{"i": 5, "x": 0.1, "y": 0, "width": 0.5, "angle": 0.3}` |
 | `body.restitution` | `(body-restitution i)` | query | — | — | Bounciness of the i-th body. | `{"i": 0}` |
 | `body.rot` | `(body-rot i)` | query | — | — | Rotation (radians) of the i-th body; NaN if out of range. | `{"i": 0}` |
 | `body.scale` | `(scale i fx fy)` | edit | `scale` | — | Resize the i-th body by (fx, fy) about its own centre, along its own axes. | `{"i": 0, "fx": 2, "fy": 1.5}` |
 | `body.set_arrows` | `(set-arrows i velocity momentum force)` | edit | `property-edit` | — | Choose which motion arrows the i-th body shows while it plays: velocity, momentum, force (non-zero = on) — undoable, saved. The arrow length is Settings > Camera > arrow scale. | `{"i": 0, "velocity": 1, "momentum": 0, "force": 1}` |
 | `body.set_color` | `(set-color i r g b)` | edit | `property-edit` | — | Set the i-th body's fill to (r, g, b), each in 0..1 — undoable. | `{"i": 0, "r": 0.9, "g": 0.3, "b": 0.1}` |
 | `body.set_density` | `(set-density i v)` | edit | `property-edit` | — | Set the i-th body's mass density (area x density = mass) — undoable. | `{"i": 0, "v": 3}` |
+| `body.set_dispersion` | `(set-dispersion i b)` | edit | `property-edit` | — | Give the i-th body a dispersion b (Cauchy's B in square micrometres: 0.004 crown glass, 0.01 flint; held to 0..0.05): a white laser splits into colours where it refracts there. A mirror body becomes glass (index 1.5) — undoable, saved. | `{"i": 0, "b": 0.01}` |
 | `body.set_fluid` | `(set-fluid i density [drag])` | edit | `property-edit` | — | Make the i-th body a fluid of density (kg/m2) and drag (1/s): bodies inside float or sink by their density and are damped; making a fluid also makes it a static sensor. Density 0 turns the fluid off — undoable. | `{"i": 0, "density": 2, "drag": 2}` |
 | `body.set_friction` | `(set-friction i v)` | edit | `property-edit` | — | Set the i-th body's Coulomb friction (static and dynamic) — undoable. | `{"i": 0, "v": 0.9}` |
 | `body.set_index` | `(set-index i n)` | edit | `property-edit` | — | Give the i-th body a refractive index n (1.33 water, 1.5 glass; held to 1..4): laser beams pass through it, bent by Snell's law, and reflect inside past the critical angle. n 0 or less makes it a mirror again — undoable, saved. | `{"i": 0, "n": 1.5}` |
+| `body.set_lifetime` | `(set-lifetime i contact ttl)` | edit | `property-edit` | — | During a run, the i-th body removes every body it starts touching (contact non-zero) and removes itself after ttl seconds (0 or less: never). Removed bodies stop colliding and hide until the run is undone — undoable, saved. | `{"i": 0, "contact": 1, "ttl": 2}` |
 | `body.set_restitution` | `(set-restitution i v)` | edit | `property-edit` | — | Set the i-th body's bounciness, 0 = dead, 1 = perfectly elastic — undoable. | `{"i": 0, "v": 0.8}` |
 | `body.set_spin` | `(set-spin i w)` | edit | `property-edit` | — | Set the spin (rad/s, counter-clockwise) the i-th body starts each run with. Applied when play starts from an edited layout, not on resume — undoable, saved. | `{"i": 0, "w": 2}` |
 | `body.set_static` | `(set-static i on)` | edit | `property-edit` | — | Make the i-th body static when `on` is non-zero, dynamic otherwise — undoable. | `{"i": 0, "on": 1}` |
+| `body.set_surface_speed` | `(set-surface-speed i v)` | edit | `property-edit` | — | Run the i-th body's surface along its outline at v m/s (positive counter-clockwise, so a positive top carries a load left; 0 stops it): a conveyor that carries what rests on it while the body stays put — undoable, saved. | `{"i": 0, "v": -1}` |
+| `body.set_texture` | `(set-texture i path)` | edit | `property-edit` | — | Show the image file path (a PNG; relative to the scene file's folder) on the i-th body's front face, as wide as the face, shaded by the look; "" removes it — undoable, saved (the path, not the image). | `{"i": 0, "path": "images/logo.png"}` |
+| `body.set_texture_mode` | `(set-texture-mode i mode)` | edit | `property-edit` | — | Shade the i-th body's image by the look ("toon") or show it unlit as it is ("raw") — undoable. A body without an image is left as it is. | `{"i": 5, "mode": "raw"}` |
 | `body.set_velocity` | `(set-velocity i vx vy)` | edit | `property-edit` | — | Set the velocity (vx, vy in m/s) the i-th body starts each run with; (0, 0) and no spin: it starts at rest. Applied when play starts from an edited layout, not on resume — undoable, saved. | `{"i": 0, "vx": 3, "vy": 0}` |
 | `body.sketch` | `(sketch path width)` | edit | `spawn-body` | — | Author one body from a freehand stroke width wide along path [x0 y0 x1 y1 …]: simplified into capsule segments joined as one union, or filled as a polygon when the stroke closes on itself. Returns its handle. | `{"path": [-1, 1, -0.5, 1.4, 0, 1, 0.5, 1.4, 1, 1], "width": 0.1}` |
 | `body.spawn_box` | `(spawn-box x y w h)` | edit | `spawn-body` | — | Author a box body of size w×h centred at (x, y), in metres; returns its handle. | `{"x": 0.5, "y": 2, "w": 1.6, "h": 1.2}` |
 | `body.spawn_box_rot` | `(spawn-box-rot x y w h angle)` | edit | `spawn-body` | — | Author a w×h box centred at (x, y), in metres, rotated by angle radians; returns its handle. | `{"x": 2, "y": 3, "w": 1, "h": 0.5, "angle": 0.3}` |
 | `body.spawn_circle` | `(spawn-circle x y r)` | edit | `spawn-body` | — | Author a circle body of radius r centred at (x, y), in metres; returns its handle. | `{"x": 0, "y": 3, "r": 0.5}` |
+| `body.spawn_gear` | `(spawn-gear x y r teeth)` | edit | `spawn-body` | — | Author a spur gear of pitch radius r (metres) and 6 to 64 teeth centred at (x, y); gears of equal r/teeth mesh by contact. Returns its handle. | `{"x": 0, "y": 2, "r": 0.6, "teeth": 12}` |
 | `body.spawn_ground` | `(spawn-ground x y angle)` | edit | `spawn-body` | — | Author a fixed ground half-plane through (x, y) (metres), tilted by angle radians. | `{"x": 0, "y": -2, "angle": 0.1}` |
+| `body.sponge` | `(sponge i spacing stiffness)` | edit | `sponge` | Context/Make sponge | Turn the i-th body into a sponge: circles spacing apart (0: about six across) inside its outline, joined by springs of natural frequency stiffness (Hz), as one group — one undo step. Grounds and fluid regions stay. | `{"i": 5, "spacing": 0, "stiffness": 12}` |
 | `body.subtract` | `(subtract a b)` | edit | `subtract` | Context/Subtract from first selected | Cut body b's shape out of body a (CSG subtract); b is consumed, a split result becomes pieces. | `{"a": 0, "b": 1}` |
+| `body.thruster_centre` | `(thruster-centre i)` | edit | `spawn-node` | Context/Thruster at centre | Attach a thruster at the i-th body's centre pushing along its local up with the default thrust — undoable. Returns its handle. | `{"i": 0}` |
+| `body.to_circle` | `(to-circle i)` | edit | `property-edit` | Context/To circle | Turn the i-th body into a circle of the same area, centred on its origin (circles and grounds stay) — undoable. | `{"i": 5}` |
 | `body.touch_count` | `(touch-count i)` | query | — | — | How many bodies the i-th body is currently touching; NaN if out of range. | `{"i": 0}` |
 | `body.where` | `(bodies-where clauses)` | query | — | — | Indices of the bodies matching every clause (kind:circle, group:0, ungrouped, palette:3, friction:0.2..0.5, not:…). | `{"clauses": ["kind:circle", "grouped"]}` |
 | `body.x` | `(body-x i)` | query | — | — | X of the i-th body (bodies ordered by id); NaN if out of range. | `{"i": 0}` |
@@ -63,7 +78,10 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 
 | Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
 |---|---|---|---|---|---|---|
+| `camera.follow` | `(camera-follow i)` | editor | — | View/Follow selection | Keep the i-th body at the centre of the view while it moves; -1 (or a pan by hand) stops following. Editor state, never undone. | `{"i": 0}` |
+| `camera.frame` | `(camera-frame targets)` | editor | — | View/Frame selection, . | Glide the view to show the bodies named (an empty list: every body but the grounds) with a margin. Editor state, never undone. | `{"targets": []}` |
 | `camera.get` | `(camera-get path)` | query | — | — | Read a camera-feel setting: "zoom_step", "pan_speed", "orbit_speed_deg"; NaN if the path does not resolve. | `{"path": "zoom_step"}` |
+| `camera.look` | `(camera-look x y zoom)` | editor | — | — | Glide the view to centre (x, y) at zoom screen pixels per metre (100 is the start view; 0 keeps the zoom); stops a follow. Editor state, never undone. | `{"x": 0, "y": 2, "zoom": 50}` |
 | `camera.set` | `(camera-set path value)` | config | — | — | Set a camera-feel setting by reflect-path (workstation config, never undone). | `{"path": "pan_speed", "value": 900}` |
 
 ## `chrome`
@@ -114,6 +132,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 
 | Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
 |---|---|---|---|---|---|---|
+| `joint.brake` | `(brake i)` | edit | `property-edit` | Context/Brake motor | Brake the i-th joint, a hinge: motor on at 0 rad/s with its torque cap kept — undoable. | `{"i": 0}` |
 | `joint.count` | `(joint-count)` | query | — | — | Number of authored joints in the committed scene. | `{}` |
 | `joint.delete` | `(delete-joint i)` | edit | `delete-joint` | Context/Delete joint, Delete | Remove the i-th joint (id order, as joint-count) — undoable. | `{"i": 0}` |
 | `joint.hinge` | `(hinge a b x y)` | edit | `spawn-joint` | — | Hinge bodies a and b at world point (x, y); b < 0 pins a to the world. | `{"a": 0, "b": 1, "x": -0.2, "y": 1}` |
@@ -192,11 +211,16 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 
 | Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
 |---|---|---|---|---|---|---|
+| `scene.browse_dir` | `(browse-dir path)` | editor | — | — | Show the scene files in a folder in the Scenes panel ("" = a folder dialog). Workstation config: not saved with the scene, no undo step. | `{"path": "scenes"}` |
 | `scene.dump` | `(scene-dump)` | query | — | — | The whole scene as JSON: the record a save writes (bodies with their groups and depth, joints with their anchors, nodes, and the environment). Lisp gets the JSON text. | `{}` |
+| `scene.import_image` | `(import-image path x y width)` | edit | `spawn-body` | File/Import image as body… | Import the image file path (a PNG; relative to the scene file's folder; "": a file dialog) as one body whose outline follows its opaque pixels (alpha at least 0.5; the largest part), width metres wide, centred at (x, y), with the image on its face — one undo step. Returns its handle. | `{"path": "assets/images/import-disc.png", "x": 0, "y": 2, "width": 1}` |
 | `scene.insert` | `(insert-scene path at)` | edit | `insert` | File/Insert… | Add a .ron file's bodies, joints, nodes and groups to the scene with fresh ids, one undo step ("" = a dialog). `at`: [] keeps the file's positions, [x y] centres the bodies there. Returns the new bodies' ids. | `{"path": "tests/fixtures/scenes/pendulum.ron", "at": [6, 2]}` |
-| `scene.load` | `(load-scene path)` | edit | `load-scene` | File/Open…, Ctrl+O | Replace the scene with a .ron file's (relative to the working directory; "" = a dialog): one undo step, as File ▸ Open. An unreadable file is an error and changes nothing. | `{"path": "tests/fixtures/scenes/pendulum.ron"}` |
+| `scene.load` | `(load-scene path)` | edit | `load-scene` | File/Open…, Ctrl+O | Replace the scene with a .ron file's, or a shared .zip bundle's (relative to the working directory; "" = a dialog): one undo step, as File ▸ Open. An unreadable file is an error and changes nothing. | `{"path": "tests/fixtures/scenes/pendulum.ron"}` |
 | `scene.new` | `(new-scene)` | edit | `load-scene` | File/New scene | Replace the scene with an empty one (default gravity, look and signals; your grid, snap, camera and workspaces stay) — one undo step, as File ▸ New scene. | `{}` |
+| `scene.rename` | `(rename-scene from to)` | editor | — | — | Rename the scene file from to the path to (both .ron), with its thumbnail. Refuses to replace a file. A file operation: no undo step. | `{"from": "target/old.ron", "to": "target/new.ron"}` |
 | `scene.save` | `(save-scene path)` | editor | — | File/Save, Ctrl+S | Write the scene to a .ron file (relative to the working directory; "" = the last path, else a dialog). Returns the path; the file is written this frame. No undo step. | `{"path": "target/scene.ron"}` |
+| `scene.share` | `(share-scene path)` | editor | — | File/Share… | Write the scene as one .zip file to share: its scene.ron, a thumbnail and every image its bodies show ("" = a dialog). Opening the file loads the scene. Copies the path to the clipboard. No undo step. | `{"path": "target/shared.zip"}` |
+| `scene.trash` | `(trash-scene path)` | editor | — | — | Move the scene file at path (.ron) and its thumbnail into the .trash folder beside it. A file operation: no undo step; move it back by hand. | `{"path": "target/unwanted.ron"}` |
 
 ## `scenery`
 
@@ -214,6 +238,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `signal.get` | `(signal-get name)` | query | — | — | Current value of a named signal on the bus; NaN if unset. | `{"name": "t"}` |
 | `signal.history` | `(signal-history name)` | query | — | — | A signal's recorded samples, oldest first, as a list of [t v] (t in simulated seconds; the last 600, recorded while the sim plays or steps); empty if the bus has no such signal. | `{"name": "t"}` |
 | `signal.key` | `(defkey name key [negative])` | config | `settings` | — | Declare a key input: a signal that is 1 while key is held in play (0 paused or while a field has the keyboard); with negative, -1 while that key is held and 0 when both are. While the sim plays the key is the input's, not the editor's. | `{"name": "throttle", "key": "E", "negative": "Q"}` |
+| `signal.pad` | `(defpad name input [dead_zone])` | config | `settings` | — | Declare a gamepad input: a signal that reads a stick (-1..1) or a button (0..1) of the first connected gamepad while the sim plays (0 paused). Values inside dead_zone (default 0.1) read 0, and the rest of the travel is rescaled to reach 1. | `{"name": "steer", "input": "LeftStickX", "dead_zone": 0.1}` |
 | `signal.param` | `(defparam name value min max)` | config | `settings` | — | Declare a tunable signal parameter (an auto-slider) published on the bus. | `{"name": "amp", "value": 2, "min": 0, "max": 10}` |
 | `signal.set` | `(signal-set name value)` | editor | — | — | Publish a named value on the signal bus (drives bindings; docs/signal-dataflow.md). | `{"name": "excitement", "value": 7}` |
 | `signal.unbind` | `(unbind name)` | config | `settings` | — | Remove the signal binding of this name; an actuator it drove returns to its authored value. | `{"name": "drive"}` |
@@ -238,6 +263,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `tool.circle` | `(circle-tool)` | editor | — | Tools/Circle, C | Use the circle tool: press at the centre, drag out the radius. | `{}` |
 | `tool.cut` | `(cut-tool)` | editor | — | Tools/Cut, K | Use the cut tool: drag a stroke across the bodies to cut. | `{}` |
 | `tool.drag` | `(drag-tool)` | editor | — | Tools/Drag, D | Use the drag tool: pull bodies with a mouse spring while playing, move them while paused. | `{}` |
+| `tool.gear` | `(gear-tool)` | editor | — | Tools/Gear | Use the gear tool: press at the centre, drag out the pitch radius; drawn gears mesh. | `{}` |
 | `tool.ground` | `(ground-tool)` | editor | — | Tools/Ground, G | Use the ground tool: click to place a ground plane, drag to tilt it. | `{}` |
 | `tool.hinge` | `(hinge-tool)` | editor | — | Tools/Hinge, H | Use the hinge tool: click where two bodies overlap to hinge them, or on one body to pin it. | `{}` |
 | `tool.laser` | `(laser-tool)` | editor | — | Tools/Laser | Use the laser tool: press where the laser sits, drag to aim; release over a body to make it the target. | `{}` |
@@ -246,10 +272,12 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `tool.register` | `(register-tool name points src)` | editor | — | — | Add a palette tool that collects `points` clicks, then runs src once (read them with tool-x/tool-y). | `{"name": "peg", "points": 1, "src": "(spawn-circle (tool-x 0) (tool-y 0) 0.2)"}` |
 | `tool.rod` | `(rod-tool)` | editor | — | Tools/Rod, L | Use the rod tool: drag from one end to the other. | `{}` |
 | `tool.select` | `(select-tool)` | editor | — | Tools/Select, S | Use the select tool: click to select, drag to move, right-drag to rotate. | `{}` |
-| `tool.sketch` | `(sketch-tool)` | editor | — | Tools/Sketch | Use the sketch tool: draw freehand; release makes one body of the stroke. | `{}` |
+| `tool.sketch` | `(sketch-tool)` | editor | — | Tools/Sketch | Use the sketch tool: draw freehand; release makes one body of the stroke. Hold Alt as you press to erase the stroke from the bodies it touches. | `{}` |
 | `tool.spring` | `(spring-tool)` | editor | — | Tools/Spring, T | Use the spring tool: drag from one anchor to the other. | `{}` |
+| `tool.texture` | `(texture-tool)` | editor | — | Tools/Texture | Use the texture tool: drag a body's image to move it, Shift-drag to scale it, right-drag to turn it. | `{}` |
 | `tool.thruster` | `(thruster-tool)` | editor | — | Tools/Thruster | Use the thruster tool: press on a body where it pushes; a click pushes up, a drag aims the push. | `{}` |
 | `tool.tracer` | `(tracer-tool)` | editor | — | Tools/Tracer, N | Use the tracer tool: click a body (or empty space) to place a tracer. | `{}` |
+| `tool.water` | `(water-tool)` | editor | — | Tools/Water | Use the water tool: drag out a rectangle; it fills with particle water when the sim plays. | `{}` |
 | `tool.weld` | `(weld-tool)` | editor | — | Tools/Weld, W | Use the weld tool: click two overlapping bodies to merge them. | `{}` |
 
 ## `ui`
@@ -275,6 +303,13 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `units.of` | `(unit-of unit)` | query | — | — | The SI unit symbol of what a unit measures, as quantity-unit reports it: (unit-of "km/h") is "m/s" ("" for a plain number). | `{"unit": "km/h"}` |
 | `units.shown` | `(units-shown)` | query | — | — | The units the fields show, as (angle length), e.g. ("deg" "m"). | `{}` |
 | `units.si` | `(q value unit)` | query | — | — | A number in a unit, in SI: (q 25 "cm") is 0.25, (q 90 "deg") is pi/2. A unit the parser does not read is an error. | `{"value": 25, "unit": "cm"}` |
+
+## `water`
+
+| Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
+|---|---|---|---|---|---|---|
+| `water.drain` | `(drain)` | edit | `delete` | — | Remove all particle water (every water emitter) — one undo step. | `{}` |
+| `water.fill` | `(add-water path)` | edit | `spawn-node` | — | Add particle water filling the closed outline path (x0 y0 x1 y1 …, metres, three points or more): it fills when the sim plays — undoable, saved. Returns its handle. | `{"path": [-1, 0, 1, 0, 1, 1, -1, 1]}` |
 
 ## `workspace`
 

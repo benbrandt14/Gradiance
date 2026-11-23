@@ -68,6 +68,7 @@ pub(crate) fn install(app: &mut App) {
         registry.register::<InsertScene>();
         registry.register::<CopyScene>();
         registry.register::<PasteScene>();
+        registry.register::<ShareScene>();
     }
     app.world_mut()
         .resource_mut::<OpContextFillers>()
@@ -80,7 +81,7 @@ fn fill_scene_dump(world: &mut World, ctx: &mut OpContext) {
 }
 
 /// Whether `path` names a file with extension `ext` (any case).
-fn has_extension(path: &Path, ext: &str) -> bool {
+pub(crate) fn has_extension(path: &Path, ext: &str) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
         .is_some_and(|e| e.eq_ignore_ascii_case(ext))
@@ -136,7 +137,7 @@ impl Operation for LoadScene {
     const META: OpMeta = OpMeta {
         id: "scene.load",
         lisp: "load-scene",
-        doc: "Replace the scene with a .ron file's (relative to the working directory; \"\" = a dialog): one undo step, as File ▸ Open. An unreadable file is an error and changes nothing.",
+        doc: "Replace the scene with a .ron file's, or a shared .zip bundle's (relative to the working directory; \"\" = a dialog): one undo step, as File ▸ Open. An unreadable file is an error and changes nothing.",
         seam: Seam::Edit,
         menu: Some("File/Open…"),
         chord: Some("Ctrl+O"),
@@ -149,12 +150,24 @@ impl Operation for LoadScene {
             return Ok(OpOutput::none().message(LoadSceneRequest { path: None }));
         }
         // Read once here so a caller hears why a file will not load; the
-        // request reads it again where it is applied.
+        // request reads it again where it is applied. A `.zip` is a shared
+        // bundle (brief S-18): its `scene.ron` must parse.
         let path = PathBuf::from(&self.path);
-        std::fs::read_to_string(&path)
-            .map_err(|e| e.to_string())
-            .and_then(|text| from_ron(&text).map_err(|e| e.to_string()))
-            .map_err(|why| OpError::Invalid(format!("`{}`: {why}", self.path)))?;
+        let checked = if crate::bundle::is_bundle(&path) {
+            std::fs::read(&path)
+                .map_err(|e| e.to_string())
+                .and_then(|bytes| {
+                    crate::bundle::read_zip(&bytes)
+                        .and_then(|entries| crate::bundle::parse(&entries))
+                        .map(drop)
+                        .map_err(|e| e.to_string())
+                })
+        } else {
+            std::fs::read_to_string(&path)
+                .map_err(|e| e.to_string())
+                .and_then(|text| from_ron(&text).map(drop).map_err(|e| e.to_string()))
+        };
+        checked.map_err(|why| OpError::Invalid(format!("`{}`: {why}", self.path)))?;
         Ok(OpOutput::none()
             .message(LoadSceneRequest { path: Some(path) })
             .returning(self.path))
@@ -385,5 +398,43 @@ mod tests {
         }
         .lower(&ctx());
         assert!(missing.is_err());
+    }
+}
+
+/// Write the scene as one shareable file (brief S-18).
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct ShareScene {
+    /// The bundle (must end in `.zip`; relative to the working directory).
+    /// Empty: a file dialog.
+    pub path: String,
+}
+
+impl Operation for ShareScene {
+    const META: OpMeta = OpMeta {
+        id: "scene.share",
+        lisp: "share-scene",
+        doc: "Write the scene as one .zip file to share: its scene.ron, a thumbnail and every image its bodies show (\"\" = a dialog). Opening the file loads the scene. Copies the path to the clipboard. No undo step.",
+        seam: Seam::Editor,
+        menu: Some("File/Share…"),
+        chord: None,
+        undo: None,
+        example: r#"{"path": "target/shared.zip"}"#,
+    };
+
+    fn lower(self, _ctx: &OpContext) -> Result<OpOutput, OpError> {
+        if self.path.is_empty() {
+            return Ok(OpOutput::none().message(crate::ShareSceneRequest { path: None }));
+        }
+        let path = PathBuf::from(&self.path);
+        if !crate::bundle::is_bundle(&path) {
+            return Err(OpError::Invalid(format!(
+                "a shared scene ends in .zip: `{}`",
+                self.path
+            )));
+        }
+        Ok(OpOutput::none()
+            .message(crate::ShareSceneRequest { path: Some(path) })
+            .returning(self.path))
     }
 }

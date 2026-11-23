@@ -35,6 +35,12 @@ pub enum PropertyValue {
     Fluid(Option<gradiance_domain::fluid::Fluid>),
     /// Refractive index (`None` = a mirror to beams; brief S-3).
     Optics(Option<gradiance_domain::optics::Optics>),
+    /// Removal during a run (`None` = never removed; brief S-7).
+    Lifetime(Option<gradiance_domain::lifetime::Lifetime>),
+    /// The conveyor speed (brief S-8); none or zero: a still surface.
+    SurfaceSpeed(Option<gradiance_domain::surface::SurfaceSpeed>),
+    /// The front-face image (brief S-13); none: no image.
+    Texture(Option<gradiance_domain::texture::BodyTexture>),
     /// Initial velocity and spin (`None` = starts at rest; brief S-1).
     InitialMotion(Option<gradiance_domain::motion::InitialMotion>),
     /// Trajectory-trail marker (`None` = no tracer).
@@ -106,6 +112,20 @@ impl PropertyValue {
             Self::Optics(optics) => set_optional(
                 &mut entity_mut,
                 optics.map(gradiance_domain::optics::Optics::sanitized),
+            ),
+            Self::Lifetime(lifetime) => set_optional(
+                &mut entity_mut,
+                lifetime.and_then(gradiance_domain::lifetime::Lifetime::sanitized),
+            ),
+            Self::SurfaceSpeed(surface) => set_optional(
+                &mut entity_mut,
+                surface.and_then(gradiance_domain::surface::SurfaceSpeed::sanitized),
+            ),
+            Self::Texture(texture) => set_optional(
+                &mut entity_mut,
+                texture
+                    .clone()
+                    .and_then(gradiance_domain::texture::BodyTexture::sanitized),
             ),
             // A motion at rest is no motion: the record stays empty.
             Self::InitialMotion(motion) => {

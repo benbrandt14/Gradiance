@@ -61,6 +61,9 @@ pub struct BodyProps<'w, 's> {
     fluid_q: Query<'w, 's, &'static gradiance_domain::fluid::Fluid, With<Body>>,
     motion_q: Query<'w, 's, &'static gradiance_domain::motion::InitialMotion, With<Body>>,
     optics_q: Query<'w, 's, &'static gradiance_domain::optics::Optics, With<Body>>,
+    lifetime_q: Query<'w, 's, &'static gradiance_domain::lifetime::Lifetime, With<Body>>,
+    surface_q: Query<'w, 's, &'static gradiance_domain::surface::SurfaceSpeed, With<Body>>,
+    texture_q: Query<'w, 's, &'static gradiance_domain::texture::BodyTexture, With<Body>>,
     friction_q: Query<'w, 's, &'static Friction, With<Body>>,
     restitution_q: Query<'w, 's, &'static Restitution, With<Body>>,
     density_q: Query<'w, 's, &'static ColliderDensity, With<Body>>,
@@ -342,12 +345,238 @@ pub fn physics_section(ui: &mut egui::Ui, selection: &Selection, props: &mut Bod
     optics_block(ui, selection, props, primary);
     tracer_block(ui, selection, props, primary);
     motion_block(ui, selection, props, primary);
+    lifetime_block(ui, selection, props, primary);
+    surface_row(ui, selection, props, primary);
+    texture_block(ui, selection, props, primary);
+}
+
+/// The image row (brief S-13): the file path (Enter applies it, by the
+/// rule of `body.set_texture`), raw or shaded by the look, and remove. The texture
+/// tool places it. One undo step per edit.
+fn texture_block(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProps, primary: Entity) {
+    use gradiance_domain::texture::{BodyTexture, TextureMode};
+    let current = props.texture_q.get(primary).ok().cloned();
+    ui.horizontal(|ui| {
+        ui.label("image")
+            .on_hover_text("a PNG on the front face, relative to the scene file's folder");
+        let key = ui.id().with(("image-path", primary));
+        let mut text: String = ui.data_mut(|d| d.get_temp(key)).unwrap_or_else(|| {
+            current
+                .as_ref()
+                .map_or_else(String::new, |t| t.path.clone())
+        });
+        let response = ui.add(egui::TextEdit::singleline(&mut text).desired_width(140.0));
+        if response.changed() {
+            ui.data_mut(|d| d.insert_temp(key, text.clone()));
+        }
+        if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+            ui.data_mut(|d| d.remove::<String>(key));
+            // The verb's rule: a new image covers the face.
+            let changes: Vec<PropertyChange> = selection
+                .iter()
+                .filter_map(|e| {
+                    let id = props.ids.get(e).ok().copied()?;
+                    let shape = props.shapes_q.get(e).ok()?;
+                    let old = props.texture_q.get(e).ok().cloned();
+                    let new =
+                        gradiance_command::ops::texture::with_path(old.as_ref(), shape, &text);
+                    (old != new).then_some(PropertyChange {
+                        id,
+                        old: PropertyValue::Texture(old),
+                        new: PropertyValue::Texture(new),
+                    })
+                })
+                .collect();
+            if !changes.is_empty() {
+                props.edits.write(PropertyEditIntent { changes });
+            }
+        }
+    });
+    let Some(current) = current else {
+        return;
+    };
+    let edit = |new: Option<BodyTexture>, props: &mut BodyProps| {
+        let changes: Vec<PropertyChange> = selection
+            .iter()
+            .filter_map(|e| {
+                let id = props.ids.get(e).ok().copied()?;
+                let old = props.texture_q.get(e).ok().cloned();
+                let new = match (&new, &old) {
+                    // A mode change keeps each body's own placement.
+                    (Some(n), Some(o)) => Some(BodyTexture {
+                        mode: n.mode,
+                        ..o.clone()
+                    }),
+                    _ => None,
+                };
+                (old != new).then_some(PropertyChange {
+                    id,
+                    old: PropertyValue::Texture(old),
+                    new: PropertyValue::Texture(new),
+                })
+            })
+            .collect();
+        if !changes.is_empty() {
+            props.edits.write(PropertyEditIntent { changes });
+        }
+    };
+    ui.horizontal(|ui| {
+        let mut raw = current.mode == TextureMode::Raw;
+        if ui
+            .checkbox(&mut raw, "raw")
+            .on_hover_text("show the image as it is, without the look's shading")
+            .changed()
+        {
+            let mode = if raw {
+                TextureMode::Raw
+            } else {
+                TextureMode::Toon
+            };
+            edit(
+                Some(BodyTexture {
+                    mode,
+                    ..current.clone()
+                }),
+                props,
+            );
+        }
+        if ui.button("remove image").clicked() {
+            edit(None, props);
+        }
+    });
+}
+
+/// The conveyor row (brief S-8): the surface speed along the outline, in
+/// m/s; 0 is a still surface. One undo step per gesture.
+fn surface_row(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProps, primary: Entity) {
+    use gradiance_domain::surface::{MAX_SURFACE_SPEED, SurfaceSpeed};
+    use gradiance_units::Velocity;
+    let mut speed = props.surface_q.get(primary).map_or(0.0, |s| s.0.0);
+    ui.horizontal(|ui| {
+        ui.label("surface speed").on_hover_text(
+            "a conveyor: the surface runs along the outline (positive counter-clockwise) and carries what rests on it",
+        );
+        if let Commit::Done(_, new) = precise_drag_clamped(
+            ui,
+            ui.id().with("surface-speed"),
+            &mut speed,
+            0.0,
+            0.01,
+            -MAX_SURFACE_SPEED..=MAX_SURFACE_SPEED,
+            Dimension::Velocity,
+        ) {
+            let new = SurfaceSpeed(Velocity(new)).sanitized();
+            let changes: Vec<PropertyChange> = selection
+                .iter()
+                .filter_map(|e| {
+                    let id = props.ids.get(e).ok().copied()?;
+                    let old = props.surface_q.get(e).ok().copied();
+                    (old != new).then_some(PropertyChange {
+                        id,
+                        old: PropertyValue::SurfaceSpeed(old),
+                        new: PropertyValue::SurfaceSpeed(new),
+                    })
+                })
+                .collect();
+            if !changes.is_empty() {
+                props.edits.write(PropertyEditIntent { changes });
+            }
+        }
+    });
+}
+
+/// The lifetime editor (brief S-7): remove what this body touches, and
+/// remove this body after a time. Removal lasts for the run; undoing the run
+/// brings the bodies back. One undo step per gesture.
+fn lifetime_block(
+    ui: &mut egui::Ui,
+    selection: &Selection,
+    props: &mut BodyProps,
+    primary: Entity,
+) {
+    use gradiance_domain::lifetime::Lifetime;
+    use gradiance_units::Time;
+    let current = props
+        .lifetime_q
+        .get(primary)
+        .ok()
+        .copied()
+        .unwrap_or_default();
+    let mut contact = current.remove_on_contact;
+    if ui
+        .checkbox(&mut contact, "remove what it touches")
+        .on_hover_text("while it plays, every body this one hits is removed")
+        .changed()
+    {
+        commit_lifetime(selection, props, move |l| Lifetime {
+            remove_on_contact: contact,
+            ..l
+        });
+    }
+    let mut timed = current.ttl.is_some();
+    ui.horizontal(|ui| {
+        if ui
+            .checkbox(&mut timed, "remove after")
+            .on_hover_text("while it plays, this body is removed after this simulated time")
+            .changed()
+        {
+            commit_lifetime(selection, props, move |l| Lifetime {
+                ttl: timed.then_some(l.ttl.unwrap_or(Time(1.0))),
+                ..l
+            });
+        }
+        let Some(ttl) = current.ttl else {
+            return;
+        };
+        let mut seconds = ttl.0;
+        if let Commit::Done(_, new) = precise_drag_clamped(
+            ui,
+            ui.id().with("lifetime-ttl"),
+            &mut seconds,
+            1.0,
+            0.01,
+            0.01..=3600.0,
+            Dimension::Time,
+        ) {
+            commit_lifetime(selection, props, move |l| Lifetime {
+                ttl: Some(Time(new)),
+                ..l
+            });
+        }
+    });
+}
+
+/// Commits one batched lifetime edit across the selection: each target's
+/// new lifetime is `make_new` of its own; an empty lifetime is stored as none.
+fn commit_lifetime(
+    selection: &Selection,
+    props: &mut BodyProps,
+    make_new: impl Fn(gradiance_domain::lifetime::Lifetime) -> gradiance_domain::lifetime::Lifetime,
+) {
+    let changes: Vec<PropertyChange> = selection
+        .iter()
+        .filter_map(|e| {
+            let id = props.ids.get(e).ok().copied()?;
+            let old = props.lifetime_q.get(e).ok().copied();
+            let new = make_new(old.unwrap_or_default()).sanitized();
+            (old != new).then_some(PropertyChange {
+                id,
+                old: PropertyValue::Lifetime(old),
+                new: PropertyValue::Lifetime(new),
+            })
+        })
+        .collect();
+    if !changes.is_empty() {
+        props.edits.write(PropertyEditIntent { changes });
+    }
 }
 
 /// The optics editor (brief S-3): a toggle that lets laser beams through
 /// the body, and its refractive index. One undo step per gesture.
 fn optics_block(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProps, primary: Entity) {
-    use gradiance_domain::optics::{DEFAULT_INDEX, MAX_INDEX, MIN_INDEX, Optics};
+    use gradiance_domain::optics::{
+        DEFAULT_INDEX, GLASS_DISPERSION, MAX_DISPERSION, MAX_INDEX, MIN_INDEX, Optics,
+    };
     let current = props.optics_q.get(primary).ok().copied();
     let mut on = current.is_some();
     if ui
@@ -374,7 +603,43 @@ fn optics_block(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProps,
             MIN_INDEX..=MAX_INDEX,
             Dimension::Dimensionless,
         ) {
-            commit_optics(selection, props, Some(Optics { index: new }.sanitized()));
+            commit_optics(
+                selection,
+                props,
+                Some(
+                    Optics {
+                        index: new,
+                        ..optics
+                    }
+                    .sanitized(),
+                ),
+            );
+        }
+    });
+    let mut dispersion = optics.dispersion;
+    ui.horizontal(|ui| {
+        ui.label("dispersion")
+            .on_hover_text("Cauchy B (square micrometres): how far a white beam fans into colours; 0.004 crown glass, 0.01 flint");
+        if let Commit::Done(_, new) = precise_drag_clamped(
+            ui,
+            ui.id().with("optics-dispersion"),
+            &mut dispersion,
+            GLASS_DISPERSION,
+            0.0005,
+            0.0..=MAX_DISPERSION,
+            Dimension::Dimensionless,
+        ) {
+            commit_optics(
+                selection,
+                props,
+                Some(
+                    Optics {
+                        dispersion: new,
+                        ..optics
+                    }
+                    .sanitized(),
+                ),
+            );
         }
     });
 }

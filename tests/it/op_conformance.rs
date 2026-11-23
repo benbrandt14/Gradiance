@@ -119,6 +119,8 @@ fn run_with_ids(app: &mut App, ids: u64, source: &str) {
 ///   overlapping pairwise, so every boolean has an effect;
 /// - bodies 3, 4: apart at x = 3 and 5, grouped together; body 3 is pinned
 ///   to the world by joint 0, whose motor speed the binding `drive` names;
+/// - a water emitter (node 0) over x = 9..10, so `water.drain` has water;
+/// - an image on body 5, so the texture placement and mode have one;
 /// - one undone spawn on the redo stack, so `redo` has a step to take.
 pub(crate) fn fixture() -> App {
     let mut app = headless_app_with(|app| {
@@ -132,11 +134,15 @@ pub(crate) fn fixture() -> App {
         &mut app,
         10,
         "(begin (spawn-circle -0.4 1 0.5) (spawn-circle 0 1 0.5) (spawn-circle 0.4 1 0.5) \
-         (spawn-circle 3 1 0.5) (spawn-circle 5 1 0.5))",
+         (spawn-circle 3 1 0.5) (spawn-circle 5 1 0.5) (spawn-box 7 1 1 0.5))",
     );
     run_with_ids(&mut app, 20, "(begin (hinge 3 -1 3 1) (group (list 3 4)))");
     // A binding, so `signal.unbind`'s example has one to remove.
     run_with_ids(&mut app, 25, "(bind \"drive\" \"t\" \"motor-speed\" 0)");
+    // Water, so `water.drain`'s example has some to remove.
+    run_with_ids(&mut app, 28, "(add-water (list 9 0 10 0 10 1 9 1))");
+    // An image on body 5, so the texture placement and mode have one.
+    run_with_ids(&mut app, 29, "(set-texture 5 \"a.png\")");
     run_with_ids(&mut app, 30, "(spawn-circle 0 6 0.5)");
     run_with_ids(&mut app, 40, "(undo)");
     // A saved workspace, so `layout.workspace.delete`'s example has one.
@@ -515,7 +521,9 @@ fn every_key_row_acts_on_the_selection_and_a_script_cannot() {
                 .flat_map(|t| t.writes.clone())
                 .collect::<String>();
             wrote |= !text.is_empty();
-            if names_selection && !text.is_empty() {
+            // An edit names exactly the selected objects. An editor row (the
+            // camera frame) writes a view of them, not their ids.
+            if names_selection && entry.meta.seam == Seam::Edit && !text.is_empty() {
                 for (i, id) in bodies.iter().enumerate() {
                     let selected = !selected_joint && picked.contains(&i);
                     assert_eq!(

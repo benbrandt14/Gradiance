@@ -18,7 +18,7 @@ use gradiance_domain::fluid::Fluid;
 use gradiance_domain::motion::InitialMotion;
 use gradiance_domain::props::BodyPhysics;
 use gradiance_op::{OpContext, OpError, OpMeta, OpOutput, OpRegistry, Operation, Seam, Target};
-use gradiance_units::{Angle, Length};
+use gradiance_units::{Angle, Length, Time};
 use serde::Deserialize;
 
 /// Registers this file's operations.
@@ -38,6 +38,9 @@ pub(super) fn register(registry: &mut OpRegistry) {
     registry.register::<SetSpin>();
     registry.register::<SetArrows>();
     registry.register::<SetIndex>();
+    registry.register::<SetDispersion>();
+    registry.register::<SetLifetime>();
+    registry.register::<SetSurfaceSpeed>();
 }
 
 /// Move the body `i` to (`x`, `y`) and rotate it to `angle`: one undo step.
@@ -717,16 +720,166 @@ impl Operation for SetIndex {
 
     fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
         let scene = ctx.get::<SceneSnapshot>()?;
-        let new =
-            (self.n > 0.0).then(|| gradiance_domain::optics::Optics { index: self.n }.sanitized());
         let changes: Vec<PropertyChange> = bodies_of(ctx, scene, &self.i)?
             .into_iter()
             .filter_map(|id| scene.get(id))
-            .filter(|body| body.optics != new)
+            .filter_map(|body| {
+                // A new index keeps the body's dispersion (brief S-15).
+                let new = (self.n > 0.0).then(|| {
+                    let base = body.optics.unwrap_or_default();
+                    gradiance_domain::optics::Optics {
+                        index: self.n,
+                        ..base
+                    }
+                    .sanitized()
+                });
+                (body.optics != new).then_some(PropertyChange {
+                    id: body.id,
+                    old: PropertyValue::Optics(body.optics),
+                    new: PropertyValue::Optics(new),
+                })
+            })
+            .collect();
+        if changes.is_empty() {
+            return Ok(OpOutput::none());
+        }
+        Ok(OpOutput::none().message(PropertyEditIntent { changes }))
+    }
+}
+
+/// Give a body's index a wavelength dependence (brief S-15): Cauchy's `B`.
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct SetDispersion {
+    /// The body.
+    pub i: Target,
+    /// Cauchy's B in µm² (crown glass 0.004, flint 0.01; held to 0..0.05).
+    pub b: f32,
+}
+
+impl Operation for SetDispersion {
+    const META: OpMeta = OpMeta {
+        id: "body.set_dispersion",
+        lisp: "set-dispersion",
+        doc: "Give the i-th body a dispersion b (Cauchy's B in square micrometres: 0.004 crown glass, 0.01 flint; held to 0..0.05): a white laser splits into colours where it refracts there. A mirror body becomes glass (index 1.5) — undoable, saved.",
+        seam: Seam::Edit,
+        menu: None,
+        chord: None,
+        undo: Some(name::PROPERTY_EDIT),
+        example: r#"{"i": 0, "b": 0.01}"#,
+    };
+
+    fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
+        let scene = ctx.get::<SceneSnapshot>()?;
+        let changes: Vec<PropertyChange> = bodies_of(ctx, scene, &self.i)?
+            .into_iter()
+            .filter_map(|id| scene.get(id))
+            .filter_map(|body| {
+                let new = Some(
+                    gradiance_domain::optics::Optics {
+                        dispersion: self.b,
+                        ..body.optics.unwrap_or_default()
+                    }
+                    .sanitized(),
+                );
+                (body.optics != new).then_some(PropertyChange {
+                    id: body.id,
+                    old: PropertyValue::Optics(body.optics),
+                    new: PropertyValue::Optics(new),
+                })
+            })
+            .collect();
+        if changes.is_empty() {
+            return Ok(OpOutput::none());
+        }
+        Ok(OpOutput::none().message(PropertyEditIntent { changes }))
+    }
+}
+
+/// Mark a body to remove what it touches, or itself after a time, during a
+/// run (brief S-7). Removal lasts for the run; undoing the run brings the
+/// bodies back.
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct SetLifetime {
+    /// The body.
+    pub i: Target,
+    /// Non-zero: remove every other body this one starts touching.
+    pub contact: f64,
+    /// Remove this body after this time; 0 or less: never.
+    pub ttl: Time,
+}
+
+impl Operation for SetLifetime {
+    const META: OpMeta = OpMeta {
+        id: "body.set_lifetime",
+        lisp: "set-lifetime",
+        doc: "During a run, the i-th body removes every body it starts touching (contact non-zero) and removes itself after ttl seconds (0 or less: never). Removed bodies stop colliding and hide until the run is undone — undoable, saved.",
+        seam: Seam::Edit,
+        menu: None,
+        chord: None,
+        undo: Some(name::PROPERTY_EDIT),
+        example: r#"{"i": 0, "contact": 1, "ttl": 2}"#,
+    };
+
+    fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
+        let scene = ctx.get::<SceneSnapshot>()?;
+        let new = gradiance_domain::lifetime::Lifetime {
+            remove_on_contact: self.contact != 0.0,
+            ttl: Some(self.ttl),
+        }
+        .sanitized();
+        let changes: Vec<PropertyChange> = bodies_of(ctx, scene, &self.i)?
+            .into_iter()
+            .filter_map(|id| scene.get(id))
+            .filter(|body| body.lifetime != new)
             .map(|body| PropertyChange {
                 id: body.id,
-                old: PropertyValue::Optics(body.optics),
-                new: PropertyValue::Optics(new),
+                old: PropertyValue::Lifetime(body.lifetime),
+                new: PropertyValue::Lifetime(new),
+            })
+            .collect();
+        if changes.is_empty() {
+            return Ok(OpOutput::none());
+        }
+        Ok(OpOutput::none().message(PropertyEditIntent { changes }))
+    }
+}
+
+/// Make a body a conveyor (brief S-8): its surface runs along its outline
+/// at `v` m/s and carries what rests on it, while the body stays put.
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct SetSurfaceSpeed {
+    /// The body.
+    pub i: Target,
+    /// The surface speed: positive counter-clockwise, 0 a still surface.
+    pub v: gradiance_units::Velocity,
+}
+
+impl Operation for SetSurfaceSpeed {
+    const META: OpMeta = OpMeta {
+        id: "body.set_surface_speed",
+        lisp: "set-surface-speed",
+        doc: "Run the i-th body's surface along its outline at v m/s (positive counter-clockwise, so a positive top carries a load left; 0 stops it): a conveyor that carries what rests on it while the body stays put — undoable, saved.",
+        seam: Seam::Edit,
+        menu: None,
+        chord: None,
+        undo: Some(name::PROPERTY_EDIT),
+        example: r#"{"i": 0, "v": -1}"#,
+    };
+
+    fn lower(self, ctx: &OpContext) -> Result<OpOutput, OpError> {
+        let scene = ctx.get::<SceneSnapshot>()?;
+        let new = gradiance_domain::surface::SurfaceSpeed(self.v).sanitized();
+        let changes: Vec<PropertyChange> = bodies_of(ctx, scene, &self.i)?
+            .into_iter()
+            .filter_map(|id| scene.get(id))
+            .filter(|body| body.surface != new)
+            .map(|body| PropertyChange {
+                id: body.id,
+                old: PropertyValue::SurfaceSpeed(body.surface),
+                new: PropertyValue::SurfaceSpeed(new),
             })
             .collect();
         if changes.is_empty() {

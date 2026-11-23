@@ -40,10 +40,12 @@ pub mod probe;
 pub mod ramp_editor;
 pub mod reflect_grid;
 pub mod review;
+pub mod scenes;
 pub mod search;
 pub mod settings;
 pub mod signals;
 pub mod status_bar;
+pub mod text;
 pub mod theme;
 pub mod toolbar;
 pub mod unit_fields;
@@ -243,6 +245,8 @@ impl Plugin for GradianceUiPlugin {
         // Copy and paste of bodies (brief R-3): headless too, where a paste
         // reads the app's last copy.
         clipboard::install(app);
+        // The string table (brief S-19): headless too, so a test can switch it.
+        text::install(app);
         // The context menu's *open* logic is plain input handling — no
         // egui — so it registers headless too: the menu state and its
         // right-click picking are then testable without a renderer (the
@@ -301,6 +305,8 @@ impl Plugin for GradianceUiPlugin {
                     // (brief A-1: it covered the bottom dock's tabs).
                     toolbar::toolbar,
                     probe::probe_panel,
+                    scenes::scenes_window,
+                    text::share_with_egui,
                     // Bottom left of the viewport, over the scene (U-11).
                     adjust_panel::adjust_last_panel,
                     context_menu::context_menu,

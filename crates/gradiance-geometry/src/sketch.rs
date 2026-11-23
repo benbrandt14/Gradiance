@@ -186,6 +186,30 @@ pub fn sketch_shape(stroke: &[Vec2], radius: f32) -> Option<Sketch> {
     if !(radius.is_finite() && radius >= MIN_SHAPE_SIZE) {
         return None;
     }
+    let (points, length) = stroke_points(stroke)?;
+    if let Some(sketch) = closed_sketch(&points, radius, length) {
+        return Some(sketch);
+    }
+    open_sketch(&points, radius)
+}
+
+/// The capsule union a brush of `radius` leaves along `stroke` (brief
+/// S-16, the sketch tool's erase mode): [`sketch_shape`]'s open stroke,
+/// never filled, even when the stroke closes on itself. `None` on the same
+/// terms as [`sketch_shape`].
+#[must_use]
+pub fn brush_shape(stroke: &[Vec2], radius: f32) -> Option<Sketch> {
+    if !(radius.is_finite() && radius >= MIN_SHAPE_SIZE) {
+        return None;
+    }
+    let (points, _) = stroke_points(stroke)?;
+    open_sketch(&points, radius)
+}
+
+/// A stroke's distinct points and its length along them, or `None` for a
+/// stroke with a non-finite point, fewer than two points, or shorter than
+/// [`MIN_SKETCH_LENGTH`].
+fn stroke_points(stroke: &[Vec2]) -> Option<(Vec<Vec2>, f32)> {
     if !stroke.iter().all(|p| p.is_finite()) {
         return None;
     }
@@ -202,10 +226,7 @@ pub fn sketch_shape(stroke: &[Vec2], radius: f32) -> Option<Sketch> {
     if points.len() < 2 || !(length.is_finite() && length >= MIN_SKETCH_LENGTH) {
         return None;
     }
-    if let Some(sketch) = closed_sketch(&points, radius, length) {
-        return Some(sketch);
-    }
-    open_sketch(&points, radius)
+    Some((points, length))
 }
 
 /// The filled polygon of a stroke that closes, or `None` when it does not

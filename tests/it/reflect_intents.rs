@@ -160,6 +160,9 @@ fn spawn_body_intent_round_trips_through_reflection() {
         fluid: Some(gradiance::domain::fluid::Fluid::default()),
         motion: None,
         optics: None,
+        lifetime: None,
+        surface: None,
+        texture: None,
     };
     let intent = SpawnBodyIntent {
         record: record.clone(),

@@ -40,3 +40,28 @@ Colour-segmented import (one body per colour). Vector file import.
 - Gates green; `FORMAT_VERSION` bumped if option A.
 
 ## Outcome
+
+Done (2026-11-23).
+
+- **Option B** (decision `image-import-polygon`): the image is traced
+  once, at import, into a plain `Polygon`. No new shape leaf, so no format
+  change and `FORMAT_VERSION` stays 8. The image is not editable as a
+  field later; re-import it instead.
+- **Tracing:** `geometry::alpha_mask::AlphaMask` (bilinear alpha, solid at
+  0.5) gives the field; `polygonize::polygonize_alpha` contours it with
+  the shared `contour_components`, keeps the largest part and simplifies
+  each ring to at most 256 vertices. Tracing stays in `polygonize`, the
+  single discretization point. The field is the alpha level, not a
+  distance transform: only its zero set is used.
+- **Operation:** `scene.import_image` (`(import-image path x y width)`),
+  one `spawn-body` step. The body shows the image (an S-13 texture) where
+  the pixels were. An empty path is a file dialog: File ▸ "Import image
+  as body…" (one metre wide, at the origin).
+- **Asset:** `assets/images/import-disc.png` (64 px, a 28 px disc) for the
+  operation example and the test.
+- **Tests:** pure, a 200 px disc traces within 2 % of pi r squared
+  (`polygonize::tests::a_disc_image_traces_to_its_area`);
+  `tests/it/image_import.rs` (the 64 px disc within 3 %, the image centre
+  where asked, one undo step, a missing file spawns nothing); the undo
+  matrix and the conformance suite.
+

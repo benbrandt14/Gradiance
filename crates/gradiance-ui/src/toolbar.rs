@@ -34,6 +34,10 @@ const TOOL_GROUPS: &[(&str, &[(ToolState, &str, &str, &str)])] = &[
             (ToolState::Polygon, "Polygon", "P", "tool_polygon"),
             // No key: the editor keymap is not settled (briefs N-3, N-5, N-6).
             (ToolState::Sketch, "Sketch", "", "sketch"),
+            // No key (brief S-5).
+            (ToolState::Gear, "Gear", "", "gear"),
+            // No key, and no water icon in the set: the cloud stands in.
+            (ToolState::Water, "Water", "", "cloud"),
         ],
     ),
     (
@@ -56,6 +60,8 @@ const TOOL_GROUPS: &[(&str, &[(ToolState, &str, &str, &str)])] = &[
             (ToolState::Tracer, "Tracer", "N", "tool_tracer"),
             // No key: the editor keymap is not settled (briefs N-3, N-8).
             (ToolState::Thruster, "Thruster", "", "thruster"),
+            // No key (brief S-13).
+            (ToolState::Texture, "Texture", "", "texture"),
             (ToolState::Laser, "Laser", "", "laserpen"),
         ],
     ),

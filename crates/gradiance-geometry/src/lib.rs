@@ -5,6 +5,7 @@
 //! results into engine types.
 
 pub mod align;
+pub mod alpha_mask;
 pub mod array;
 pub mod beam;
 pub mod chain;
@@ -13,7 +14,10 @@ pub mod contour;
 pub mod contours;
 pub mod extrusion;
 pub mod face_field;
+pub mod gear;
 pub mod hull;
+pub mod lattice;
+pub mod partition;
 pub mod polygonize;
 pub mod profile;
 #[cfg(test)]

@@ -331,6 +331,15 @@ pub static CATALOG: &[NodeMeta] = &[
             PortMeta::scalar("rot", 0.0),
         ],
     ),
+    // Appended, not beside Key: a row's index is its kind's (`meta`).
+    signal(
+        "signal::pad",
+        SOURCES,
+        "Pad",
+        "A gamepad stick (-1..1) or button (0..1) in play, 0 within the dead \
+         zone. Reads the pad@<name> bus input.",
+        &[],
+    ),
 ];
 
 /// The catalog row of `kind`.
@@ -357,6 +366,7 @@ pub fn meta(kind: &NodeKind) -> &'static NodeMeta {
         NodeKind::HalfPlane => 18,
         NodeKind::Csg(_) => 19,
         NodeKind::Placed => 20,
+        NodeKind::Pad { .. } => 21,
     };
     &CATALOG[i]
 }

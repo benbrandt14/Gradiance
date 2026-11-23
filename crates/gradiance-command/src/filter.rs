@@ -247,6 +247,9 @@ mod tests {
             fluid: None,
             motion: None,
             optics: None,
+            lifetime: None,
+            surface: None,
+            texture: None,
         }
     }
 

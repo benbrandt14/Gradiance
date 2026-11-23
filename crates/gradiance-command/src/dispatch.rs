@@ -7,24 +7,26 @@
 //! (plus the intent and command types themselves).
 
 use crate::array_cmd::ArrayCommand;
-use crate::cut_cmd::CutCommand;
+use crate::cut_cmd::{CutCommand, EraseCommand};
 use crate::group_cmd::{GroupCommand, NameGroupCommand, RegroupCommand, UngroupCommand};
 use crate::insert_cmd::InsertCommand;
 use crate::intent::AdjustLastIntent;
 use crate::intent::name;
 use crate::intent::{
     ArrayIntent, BooleanIntent, ClearHistoryIntent, CommitTransformIntent, CutIntent, DeleteIntent,
-    DeleteJointIntent, DuplicateIntent, GroupIntent, InsertIntent, LoadSceneIntent, MergeIntent,
-    NameGroupIntent, PropertyEditIntent, RedoIntent, RegroupIntent, ScaleIntent, SpawnBodyIntent,
-    SpawnChainIntent, SpawnJointIntent, SpawnNodeIntent, SpawnRodIntent, UndoIntent, UngroupIntent,
+    DeleteJointIntent, DuplicateIntent, EraseIntent, GroupIntent, InsertIntent, LiquifyIntent,
+    LoadSceneIntent, MergeIntent, NameGroupIntent, PropertyEditIntent, RedoIntent, RegroupIntent,
+    ScaleIntent, SpawnBodyIntent, SpawnChainIntent, SpawnJointIntent, SpawnNodeIntent,
+    SpawnRodIntent, SpongeIntent, UndoIntent, UngroupIntent,
 };
 use crate::joint_cmd::{DeleteJointCommand, SpawnJointCommand};
 use crate::merge_cmd::MergeCommand;
 use crate::property::PropertyEditCommand;
 use crate::rod_cmd::SpawnRodCommand;
+use crate::rod_cmd::SpongeCommand;
 use crate::scale_cmd::ScaleCommand;
 use crate::scene_cmd::LoadSceneCommand;
-use crate::spawn::{DeleteCommand, DuplicateCommand, SpawnCommand};
+use crate::spawn::{DeleteCommand, DuplicateCommand, LiquifyCommand, SpawnCommand};
 use crate::transform_cmd::CommitTransformCommand;
 use crate::{CommandStack, GameCommand};
 use bevy::prelude::*;
@@ -100,11 +102,21 @@ command_intents! {
     ScaleIntent => |i| Box::new(ScaleCommand::new(i.targets, i.pivot, i.frame_rot, i.factors)),
     ArrayIntent => |i| Box::new(ArrayCommand::new(i.sources, i.count, i.mode)),
     CutIntent => |i| Box::new(CutCommand::new(i.a, i.b, i.width)),
+    EraseIntent => |i| Box::new(EraseCommand { line: i.line, width: i.width }),
     DeleteJointIntent => |i| Box::new(DeleteJointCommand::new(i.id)),
     MergeIntent => |i| Box::new(MergeCommand::new(i.targets)),
     BooleanIntent => |i| Box::new(MergeCommand::with_op(i.op, i.targets)),
     DuplicateIntent => |i| Box::new(DuplicateCommand::new(i.sources, i.offset)),
     DeleteIntent => |i| Box::new(DeleteCommand::new(i.targets)),
+    LiquifyIntent => |i| Box::new(LiquifyCommand {
+        targets: i.targets,
+        emitters: i.emitters,
+    }),
+    SpongeIntent => |i| Box::new(SpongeCommand {
+        target: i.target,
+        bodies: i.bodies,
+        joints: i.joints,
+    }),
 }
 
 /// Drains all pending intents, builds commands, and applies them through

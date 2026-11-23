@@ -68,6 +68,9 @@ fn body(n: u8, depth: DepthBand) -> BodyRecord {
         fluid: None,
         motion: None,
         optics: None,
+        lifetime: None,
+        surface: None,
+        texture: None,
     }
 }
 
@@ -138,6 +141,7 @@ pub(crate) fn every_quantity_scene() -> SceneRecord {
     environment.sim.drag_coefficient = 0.75;
     environment.sim.linear_drag = 0.5;
     environment.sim.wind = q("(2.5, -0.5)");
+    environment.sim.air_buoyancy = true;
     environment.grid.spacing = q("0.25");
     environment.grid.origin = q("(0.5, -1.5)");
     environment.grid.rotation = q("0.125");
@@ -200,6 +204,7 @@ pub(crate) fn every_quantity_scene() -> SceneRecord {
                     range: q("12.5"),
                     bounces: 3,
                     color: None,
+                    white: false,
                 }),
                 appearance: Appearance::default(),
             },

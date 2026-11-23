@@ -28,16 +28,21 @@
 pub mod body;
 pub mod chain;
 pub mod group;
+pub mod image;
 pub mod joint;
 pub mod look;
 pub mod node;
 pub mod quantity;
 pub mod query;
+pub mod quick;
 pub mod scene;
 pub mod sets;
 pub mod sketch;
 pub mod spawn;
+pub mod sponge;
+pub mod texture;
 pub mod units;
+pub mod water;
 
 use crate::CommandDispatchSet;
 use crate::snapshot::{BodySnapshot, SceneSnapshot, snapshot_scene};
@@ -72,6 +77,9 @@ pub fn spawned_body_record(id: StableId, shape: ShapeDef, pos: Vec2) -> BodyReco
         fluid: None,
         motion: None,
         optics: None,
+        lifetime: None,
+        surface: None,
+        texture: None,
     }
 }
 
@@ -189,6 +197,10 @@ fn fill_context(world: &mut World, ctx: &mut OpContext) {
     ctx.insert(gradiance_signal::sample_quantities(world));
     // The live environment: File ▸ New keeps its workstation half.
     ctx.insert(gradiance_scene::EnvironmentRecord::capture(world));
+    // Where a relative image path resolves (briefs S-13, S-14).
+    if let Some(folder) = world.get_resource::<gradiance_core::scene_folder::SceneFolder>() {
+        ctx.insert(folder.clone());
+    }
     if let Some(settings) = world.get_resource::<SimSettings>() {
         ctx.insert(settings.clone());
     }
@@ -225,9 +237,15 @@ impl Plugin for SceneOpsPlugin {
             scene::register(&mut registry);
             look::register(&mut registry);
             query::register(&mut registry);
+            quick::register(&mut registry);
             quantity::register(&mut registry);
             units::register(&mut registry);
+            water::register(&mut registry);
+            sponge::register(&mut registry);
+            texture::register(&mut registry);
+            image::register(&mut registry);
         }
+        app.add_message::<image::ImportImageRequest>();
         app.world_mut()
             .resource_mut::<OpContextFillers>()
             .add(fill_context);
@@ -265,11 +283,16 @@ mod tests {
                     fluid: None,
                     motion: None,
                     optics: None,
+                    lifetime: None,
+                    surface: None,
+                    texture: None,
                 })
                 .collect(),
             joints: vec![id(99)],
             nodes: Vec::new(),
             joint_links: Vec::new(),
+            joint_defs: Vec::new(),
+            water: Vec::new(),
             group_names: gradiance_domain::group::GroupNames::default(),
         }
     }

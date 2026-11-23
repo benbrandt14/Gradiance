@@ -36,3 +36,24 @@ Gesture grammar. Paint-to-add onto an existing body (E-6 owns stroke fitting).
 - Undo matrix covers `body.erase`. Gates green.
 
 ## Outcome
+
+Done 2026-11-23 (PR on the S-15 branch).
+
+- `geometry::sketch::brush_shape`: the open capsule union of a stroke,
+  never filled (a closing stroke still erases a ring, not a disc).
+- `command::cut_cmd::EraseCommand` (`EraseIntent`, undo name `erase`):
+  subtracts the brush from every body it touches and contours the result
+  with `polygonize_components`. 0 pieces: the body goes. 1 or more: fresh
+  polygon-leaf pieces through the cut's `piece_records`, joints and nodes
+  rewired as for a cut. Unlike a cut, a stroke may end inside a body and
+  leave a notch (decision `erase-allows-notches`). A stroke that touches
+  nothing records no step. `CutCommand` and `EraseCommand` share
+  `apply_stage`.
+- Verb `body.erase` (`(erase path width)`), same parameters as `sketch`.
+- Sketch tool: Alt held at the press makes the stroke erase (decision
+  `erase-modifier-alt`); the preview draws in the danger ink; release
+  invokes `body.erase`. The hint row lists "Alt+Drag".
+- Tests: `tests/it/erase.rs` (a box erased across: two pieces, area within
+  2 %, one undo; a notch: area within 2 %; a miss records nothing). The
+  undo matrix covers `body.erase` from its example.
+

@@ -82,6 +82,7 @@ pub fn settings_window(
     mut chrome: ResMut<gradiance_domain::settings::ChromeSettings>,
     mut units: ResMut<gradiance_domain::settings::UnitSettings>,
     readouts: DebugReadouts,
+    mut language: crate::text::LanguageParams,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
 
@@ -146,6 +147,8 @@ pub fn settings_window(
                     interface_tab(ui, &mut chrome);
                     ui.separator();
                     units_section(ui, &mut units);
+                    ui.separator();
+                    crate::text::language_section(ui, &mut language);
                 }
             }
         });
@@ -284,6 +287,7 @@ pub(crate) const SIM_HAND_DRAWN: &[&str] = &[
     "drag_coefficient",
     "linear_drag",
     "wind",
+    "air_buoyancy",
 ];
 
 /// The Simulation tab: the gravity-direction dial plus scrub-drag rows
@@ -423,6 +427,13 @@ fn air_section(ui: &mut egui::Ui, sim: &mut SimSettings, defaults: &SimSettings)
                 .unit(Dimension::Velocity),
         );
     });
+    let tr = |id: &str| crate::text::tr(ui.ctx(), id);
+    let (label, hint) = (
+        tr("settings-air-buoyancy"),
+        tr("settings-air-buoyancy-hint"),
+    );
+    ui.checkbox(&mut sim.air_buoyancy, label)
+        .on_hover_text(hint);
 }
 
 /// A gravity-direction dial: the handle's angle is the gravity direction.

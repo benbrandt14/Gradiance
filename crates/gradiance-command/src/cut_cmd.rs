@@ -250,6 +250,14 @@ pub(crate) fn piece_records(original: &BodyRecord, components: Vec<Contours>) ->
                 fluid: original.fluid,
                 motion: original.motion,
                 optics: original.optics,
+                lifetime: original.lifetime,
+                surface: original.surface,
+                // The image stays where it was on the page: the piece's
+                // origin moved to its centroid.
+                texture: original.texture.clone().map(|mut t| {
+                    t.offset.0 -= centroid;
+                    t
+                }),
             }
         })
         .collect()
@@ -407,28 +415,136 @@ fn rewire_cut_nodes(world: &mut World, outcomes: &[CutOutcome]) {
 impl GameCommand for CutCommand {
     fn apply(&mut self, world: &mut World) -> Result<(), CommandError> {
         let stage = self.stage(world);
-        if stage.outcomes.is_empty() {
-            return Err(CommandError::NoEffect);
-        }
-        for outcome in &stage.outcomes {
-            match &outcome.replacement {
-                Replacement::Split { pieces } => {
-                    replace_with_pieces(world, &outcome.original, pieces)?;
-                }
-                Replacement::Destroy => {
-                    let entity = resolve(world, outcome.original.id)?;
-                    world.despawn(entity);
-                }
-            }
-        }
-        apply_joint_changes(world, &stage.joint_changes)?;
-        rewire_cut_nodes(world, &stage.outcomes);
-        Ok(())
+        apply_stage(world, &stage)
     }
 
     fn name(&self) -> &'static str {
         crate::intent::name::CUT
     }
+}
+
+/// Erases a brush stroke from every body it touches (brief S-16): the
+/// capsule union along `line`, `width` wide, is subtracted from each body.
+/// Unlike a cut, an erase may end inside the material: a notch is what an
+/// eraser leaves. Pieces follow the cut's rules (fresh polygon-leaf bodies,
+/// joints and nodes rewired, a swallowed body removed).
+#[derive(Debug)]
+pub struct EraseCommand {
+    /// The stroke, world space.
+    pub line: Vec<Vec2>,
+    /// The brush width, world metres.
+    pub width: f32,
+}
+
+impl EraseCommand {
+    /// Computes what the stroke erases from every body it touches.
+    fn stage(&self, world: &mut World) -> CutStage {
+        let Some(brush) = gradiance_geometry::sketch::brush_shape(&self.line, self.width / 2.0)
+        else {
+            return CutStage::default();
+        };
+        let bodies: Vec<Entity> = {
+            let mut query = world.query_filtered::<Entity, With<Body>>();
+            query.iter(world).collect()
+        };
+        let mut outcomes = Vec::new();
+        for entity in bodies {
+            let Some(original) = BodyRecord::capture(world, entity) else {
+                continue;
+            };
+            if original.shape.contains_half_plane() {
+                continue;
+            }
+            let pose = original.pose;
+            // The brush in the body's frame.
+            let inv = Vec2::from_angle(-pose.rot);
+            let local_brush = ShapeDef::Placed {
+                pos: inv.rotate(brush.pos - pose.pos),
+                rot: brush.rot - pose.rot,
+                shape: Box::new(brush.shape.clone()),
+            };
+            if !aabbs_overlap(sdf::aabb(&original.shape), sdf::aabb(&local_brush))
+                || !touches(&original, &brush.line, brush.radius)
+            {
+                continue;
+            }
+            let tree = ShapeDef::Csg {
+                op: CsgOp::Subtract,
+                lhs: Box::new(original.shape.clone()),
+                rhs: Box::new(local_brush),
+            };
+            let components = gradiance_geometry::polygonize::polygonize_components(&tree);
+            let replacement = if components.is_empty() {
+                Replacement::Destroy
+            } else {
+                Replacement::Split {
+                    pieces: piece_records(&original, components),
+                }
+            };
+            outcomes.push(CutOutcome {
+                original,
+                replacement,
+            });
+        }
+        let joint_changes = rewire_joints(world, &outcomes);
+        CutStage {
+            outcomes,
+            joint_changes,
+        }
+    }
+}
+
+/// Whether a brush of `radius` along `line` (world) reaches `body`'s
+/// material: some sample of the centre line, a quarter radius apart, lies
+/// within `radius` of the inside.
+fn touches(body: &BodyRecord, line: &[Vec2], radius: f32) -> bool {
+    let inv = Vec2::from_angle(-body.pose.rot);
+    let local = |p: Vec2| inv.rotate(p - body.pose.pos);
+    let step = (radius / 4.0).max(1e-4);
+    line.windows(2).any(|w| {
+        let len = w[0].distance(w[1]);
+        #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let n = (len / step).ceil().max(1.0) as usize;
+        (0..=n).any(|i| {
+            #[expect(clippy::cast_precision_loss)]
+            let t = i as f32 / n as f32;
+            sdf::eval(&body.shape, local(w[0].lerp(w[1], t))) < radius
+        })
+    })
+}
+
+impl GameCommand for EraseCommand {
+    fn apply(&mut self, world: &mut World) -> Result<(), CommandError> {
+        let stage = self.stage(world);
+        apply_stage(world, &stage)
+    }
+
+    fn name(&self) -> &'static str {
+        crate::intent::name::ERASE
+    }
+}
+
+/// Applies a staged cut or erase: each body replaced by its pieces or
+/// removed, then its joints and nodes rewired. `NoEffect` when the stroke
+/// touched nothing.
+fn apply_stage(world: &mut World, stage: &CutStage) -> Result<(), CommandError> {
+    if stage.outcomes.is_empty() {
+        return Err(CommandError::NoEffect);
+    }
+    for outcome in &stage.outcomes {
+        match &outcome.replacement {
+            Replacement::Split { pieces } => {
+                replace_with_pieces(world, &outcome.original, pieces)?;
+            }
+            Replacement::Destroy => {
+                let entity = resolve(world, outcome.original.id)?;
+                world.despawn(entity);
+            }
+        }
+    }
+    apply_joint_changes(world, &stage.joint_changes)?;
+    rewire_cut_nodes(world, &stage.outcomes);
+    Ok(())
 }
 
 pub(crate) fn apply_joint_changes(

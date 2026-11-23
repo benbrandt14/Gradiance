@@ -288,6 +288,19 @@ pub fn draw_node_glyphs(
             // A barrel along the axis marks the laser; its beam is the
             // derived path the last step traced (brief N-8). A beam that
             // reaches its target ends in an accent ring.
+            // The region an emitter fills, outlined in water blue (brief
+            // S-11); its particles draw themselves while a run has them.
+            NodeKind::Water(water) => {
+                let ring = water
+                    .outline
+                    .iter()
+                    .chain(water.outline.first())
+                    .map(|v| p + *v);
+                gizmos.linestrip_2d(
+                    ring,
+                    Color::from(gradiance_domain::theme::PARTICLE_WATER.with_alpha(0.6)),
+                );
+            }
             NodeKind::Laser(laser) => {
                 let axis = Vec2::from_angle(body.map_or(0.0, |b| b.rot) + laser.angle.0);
                 gizmos.line_2d(p + axis * r, p + axis * (r + 6.0 * s), base);
@@ -298,7 +311,11 @@ pub fn draw_node_glyphs(
                             .map_or(theme.ink.danger, |c| theme.display(c))
                             .with_alpha(0.85),
                     );
-                    gizmos.linestrip_2d(beam.path.iter().copied(), ray);
+                    if beam.spectrum.is_empty() {
+                        gizmos.linestrip_2d(beam.path.iter().copied(), ray);
+                    } else {
+                        draw_white_beam(&mut gizmos, beam);
+                    }
                     if beam.hit
                         && let Some(end) = beam.path.last()
                     {
@@ -315,6 +332,26 @@ pub fn draw_node_glyphs(
         // node is in hand, and where it lands is the release's business).
         if let Some(body) = body.filter(|_| !held) {
             gizmos.line_2d(p, body.pos, base.with_alpha(0.25));
+        }
+    }
+}
+
+/// A white laser's beam (brief S-15): white while every colour shares the
+/// path, then one ray per colour from the corner where they part.
+fn draw_white_beam(gizmos: &mut Gizmos<OverlayGizmos>, beam: &LaserBeam) {
+    use gradiance_domain::theme::{SPECTRUM, WHITE_LIGHT};
+    let shared = beam.split.min(beam.path.len());
+    gizmos.linestrip_2d(
+        beam.path[..shared].iter().copied(),
+        Color::from(WHITE_LIGHT.with_alpha(0.9)),
+    );
+    let from = shared.saturating_sub(1);
+    for (path, colour) in beam.spectrum.iter().zip(SPECTRUM) {
+        if path.len() > shared {
+            gizmos.linestrip_2d(
+                path[from..].iter().copied(),
+                Color::from(colour.with_alpha(0.8)),
+            );
         }
     }
 }

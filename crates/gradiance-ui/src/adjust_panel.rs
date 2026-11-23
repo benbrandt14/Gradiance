@@ -151,9 +151,12 @@ const SHORT_LIST: usize = 4;
 /// A value as short text: an object id shows its first eight digits, a
 /// number at most three decimals, and a list longer than [`SHORT_LIST`]
 /// its length (brief Q-1: a drawn chain's path printed every coordinate at
-/// full precision and stretched the panel across the window).
+/// full precision and stretched the panel across the window). An omitted
+/// optional field reads `auto`: the operation chose its value (the body's
+/// current one, or the default), and JSON `null` meant nothing to a reader.
 fn short(value: &Value) -> String {
     match value {
+        Value::Null => "auto".to_owned(),
         Value::String(text) if text.len() > 12 => format!("{}..", &text[..8]),
         Value::String(text) => text.clone(),
         Value::Number(n) => n.as_f64().map_or_else(|| n.to_string(), decimals),
@@ -423,5 +426,15 @@ mod tests {
         );
         assert!(adjustable(&rows));
         assert_eq!(title(&merge), "Merge with fillet");
+    }
+
+    #[test]
+    fn an_omitted_optional_number_reads_auto_not_null() {
+        let app = app();
+        let fluid = entry(&app, "body.set_fluid");
+        let rows = rows(&fluid, &json!({"i": 2, "density": 2.0}));
+        assert_eq!(rows[2].name, "drag");
+        assert_eq!(rows[2].kind, RowKind::ReadOnly("auto".to_owned()));
+        assert!(adjustable(&rows), "density stays editable");
     }
 }

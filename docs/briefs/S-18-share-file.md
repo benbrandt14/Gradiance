@@ -34,3 +34,26 @@ Any network service, accounts, ratings, comments.
 - Round-trip test: share then open gives the same `scene-dump`. Gates green.
 
 ## Outcome
+
+Done 2026-11-23 (PR on the S-17 branch).
+
+- The `zip` crate is not in `Cargo.lock`. `persist::bundle` writes and
+  reads a stored (uncompressed) ZIP itself, with CRC-32 (decision
+  `share-bundle-stored-zip`). The reader takes stored entries only and
+  names the fix for a compressed one. Python's `zipfile` reads a bundle
+  and its `testzip` passes.
+- Layout: `scene.ron`, `thumbnail.png`, `images/<file>`. Each body
+  texture path is rewritten to its `images/` entry; a missing image keeps
+  its path and is logged.
+- `scene.share` (`(share-scene path)`, File > Share..., Editor seam, no
+  undo step) queues a `ShareSceneRequest`; the persist system writes the
+  file and copies its path (`ClipboardWrite`).
+- `scene.load` takes a `.zip`: the images go to a folder under the temp
+  directory, which becomes the scene folder; the last-save path is cleared
+  (decision `shared-bundle-opens-to-temp`). The open dialog shows `.zip`.
+- `browser::thumbnail_png` encodes the S-17 thumbnail in memory.
+- Tests: `tests/it/share.rs` (share then open gives the same
+  `scene.dump`; an image travels inside the bundle and resolves after
+  open); unit tests for the CRC, the writer and reader, a damaged archive,
+  and unique image names.
+

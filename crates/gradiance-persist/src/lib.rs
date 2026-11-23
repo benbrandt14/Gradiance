@@ -19,6 +19,12 @@ use gradiance_core::messages::drain;
 use gradiance_scene::{PersistError, SceneRecord, from_ron, to_ron};
 use std::path::{Path, PathBuf};
 
+/// The RON crate, for the layers above that read a RON data file (the UI's
+/// string tables, brief S-19) without a dependency edge of their own.
+pub use ron;
+
+pub mod browser;
+pub mod bundle;
 pub mod ops;
 pub mod review;
 
@@ -33,6 +39,14 @@ pub struct SaveSceneRequest {
 #[derive(Message, Debug, Clone)]
 pub struct LoadSceneRequest {
     /// Source file; `None` asks.
+    pub path: Option<PathBuf>,
+}
+
+/// Request to write the scene as one shareable file (brief S-18; `path:
+/// None` asks with a dialog).
+#[derive(Message, Debug, Clone)]
+pub struct ShareSceneRequest {
+    /// The bundle (`.zip`); `None` asks.
     pub path: Option<PathBuf>,
 }
 
@@ -76,11 +90,15 @@ impl Plugin for PersistPlugin {
         app.add_message::<ops::InsertSceneRequest>();
         app.add_message::<ops::ClipboardWrite>();
         app.add_message::<SnapshotRequest>();
+        app.add_message::<ShareSceneRequest>();
         app.init_resource::<LastScenePath>();
+        app.init_resource::<gradiance_core::scene_folder::SceneFolder>();
         app.init_resource::<AutosavePath>();
         // The scene-file operations (brief R-1): the menu, the keys and every
         // client save, open and dump through them.
         ops::install(app);
+        // The scene browser's disk side (brief S-17).
+        browser::install(app);
         app.add_systems(Startup, queue_startup_scene);
         app.add_systems(
             Update,
@@ -114,6 +132,12 @@ fn write_scene_file(scene: &SceneRecord, path: &Path) -> Result<(), PersistError
     Ok(std::fs::write(path, to_ron(scene)?)?)
 }
 
+/// Points texture paths at the folder of the scene file `path` (brief S-13).
+fn set_scene_folder(world: &mut World, path: &Path) {
+    let folder = path.parent().map(Path::to_path_buf);
+    world.insert_resource(gradiance_core::scene_folder::SceneFolder(folder));
+}
+
 /// Drains persistence requests: saves capture-and-write, loads parse into
 /// [`LoadSceneIntent`] (which dispatch turns into the undoable command).
 pub fn handle_persist_requests(world: &mut World) {
@@ -121,6 +145,9 @@ pub fn handle_persist_requests(world: &mut World) {
     let loads: Vec<LoadSceneRequest> = drain(world);
     let snapshots: Vec<SnapshotRequest> = drain(world);
     let inserts: Vec<ops::InsertSceneRequest> = drain(world);
+    let imports: Vec<gradiance_command::ops::image::ImportImageRequest> = drain(world);
+    let files: Vec<browser::SceneFileRequest> = drain(world);
+    let shares: Vec<ShareSceneRequest> = drain(world);
 
     for request in saves {
         let path = request
@@ -132,6 +159,12 @@ pub fn handle_persist_requests(world: &mut World) {
         match write_scene_file(&scene, &path) {
             Ok(()) => {
                 info!(path = %path.display(), "scene saved");
+                // The Scenes panel's thumbnail (brief S-17); a failed
+                // thumbnail never fails the save.
+                if let Err(e) = browser::write_thumbnail(&scene, &path) {
+                    warn!(path = %path.display(), error = %e, "thumbnail not written");
+                }
+                set_scene_folder(world, &path);
                 world.resource_mut::<LastScenePath>().0 = Some(path);
             }
             Err(e) => warn!(path = %path.display(), error = %e, "scene save failed"),
@@ -141,11 +174,16 @@ pub fn handle_persist_requests(world: &mut World) {
     for request in loads {
         let path = request.path.or_else(ask_load_path);
         let Some(path) = path else { continue };
+        if bundle::is_bundle(&path) {
+            open_bundle(world, &path);
+            continue;
+        }
         match std::fs::read_to_string(&path)
             .map_err(PersistError::from)
             .and_then(|t| from_ron(&t))
         {
             Ok(scene) => {
+                set_scene_folder(world, &path);
                 world.resource_mut::<LastScenePath>().0 = Some(path);
                 world.write_message(LoadSceneIntent { scene });
             }
@@ -155,6 +193,26 @@ pub fn handle_persist_requests(world: &mut World) {
 
     // File ▸ Insert…: the dialog's answer goes back through `scene.insert`,
     // so it reads, re-ids and places the file as any other call does.
+    // File ▸ Import image as body: the picked file goes back through
+    // `scene.import_image` (brief S-14).
+    for request in imports {
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter("Image", &["png"])
+            .pick_file()
+        else {
+            continue;
+        };
+        world.write_message(gradiance_op::InvokeOp::with(
+            "scene.import_image",
+            gradiance_op::json!({
+                "path": path.to_string_lossy(),
+                "x": request.x,
+                "y": request.y,
+                "width": request.width,
+            }),
+        ));
+    }
+
     for request in inserts {
         let Some(path) = ask_load_path() else {
             continue;
@@ -164,6 +222,10 @@ pub fn handle_persist_requests(world: &mut World) {
             gradiance_op::json!({"path": path.to_string_lossy(), "at": request.at}),
         ));
     }
+
+    browser::handle_requests(world, files);
+
+    handle_shares(world, shares);
 
     for request in snapshots {
         let dir = request.dir.unwrap_or_else(|| PathBuf::from("snapshots"));
@@ -211,6 +273,60 @@ pub fn autosave_on_exit(world: &mut World) {
     }
 }
 
+/// Opens a shared bundle (brief S-18): its images go to a folder under the
+/// temp directory, which becomes the scene folder. The last-path is
+/// cleared, so Ctrl+S asks where to save rather than writing into that
+/// folder.
+fn open_bundle(world: &mut World, path: &Path) {
+    let opened = std::fs::read(path)
+        .map_err(PersistError::from)
+        .and_then(|bytes| {
+            let into = bundle::extract_dir(path, &bytes);
+            bundle::open(&bytes, &into).map(|scene| (scene, into))
+        });
+    match opened {
+        Ok((scene, into)) => {
+            world.insert_resource(gradiance_core::scene_folder::SceneFolder(Some(into)));
+            world.resource_mut::<LastScenePath>().0 = None;
+            world.write_message(LoadSceneIntent { scene });
+        }
+        Err(e) => warn!(path = %path.display(), error = %e, "bundle open failed"),
+    }
+}
+
+/// Writes each requested share bundle, then copies its path.
+fn handle_shares(world: &mut World, shares: Vec<ShareSceneRequest>) {
+    for request in shares {
+        let Some(path) = request.path.or_else(ask_share_path) else {
+            continue;
+        };
+        match write_bundle(world, &path) {
+            Ok(missing) => {
+                info!(path = %path.display(), "scene shared");
+                for image in missing {
+                    warn!(image, "image not found: left out of the bundle");
+                }
+                // File > Share copies the bundle's path (the UI drains it
+                // to the system clipboard).
+                world.write_message(ops::ClipboardWrite(path.to_string_lossy().into_owned()));
+            }
+            Err(e) => warn!(path = %path.display(), error = %e, "share failed"),
+        }
+    }
+}
+
+/// Writes the share bundle of the scene to `path` (brief S-18).
+fn write_bundle(world: &mut World, path: &Path) -> Result<Vec<String>, PersistError> {
+    let scene = SceneRecord::capture(world);
+    let folder = world
+        .get_resource::<gradiance_core::scene_folder::SceneFolder>()
+        .cloned()
+        .unwrap_or_default();
+    let (bytes, missing) = bundle::share(&scene, &folder)?;
+    std::fs::write(path, bytes)?;
+    Ok(missing)
+}
+
 fn ask_save_path() -> Option<PathBuf> {
     rfd::FileDialog::new()
         .add_filter("Gradiance scene", &["ron"])
@@ -220,6 +336,13 @@ fn ask_save_path() -> Option<PathBuf> {
 
 fn ask_load_path() -> Option<PathBuf> {
     rfd::FileDialog::new()
-        .add_filter("Gradiance scene", &["ron"])
+        .add_filter("Gradiance scene", &["ron", "zip"])
         .pick_file()
+}
+
+fn ask_share_path() -> Option<PathBuf> {
+    rfd::FileDialog::new()
+        .add_filter("Gradiance shared scene", &["zip"])
+        .set_file_name("scene.zip")
+        .save_file()
 }

@@ -5,6 +5,7 @@
 pub mod constants;
 pub mod ids;
 pub mod messages;
+pub mod scene_folder;
 pub mod script_tools;
 pub mod states;
 pub mod units;

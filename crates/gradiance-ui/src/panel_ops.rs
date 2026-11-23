@@ -47,6 +47,7 @@ pub(crate) fn install(app: &mut App) {
     app.init_resource::<crate::depth_panel::DepthPanel>();
     app.init_resource::<crate::plot::PlotPanel>();
     app.init_resource::<crate::probe::ProbePanel>();
+    app.init_resource::<crate::scenes::ScenesPanel>();
     app.init_resource::<crate::node_graph::NodeGraph>();
     app.init_resource::<crate::outliner::ObjectTreePanel>();
     app.init_resource::<crate::groups::GroupsPanel>();

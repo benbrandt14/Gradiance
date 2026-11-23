@@ -65,6 +65,7 @@ pub mod scale_cmd;
 pub mod scene_cmd;
 pub mod snapshot;
 pub mod spawn;
+pub mod thumbnail;
 pub mod transform_cmd;
 
 use bevy::prelude::*;
@@ -265,6 +266,12 @@ impl CommandStack {
         settle_restored_poses(&self.states[to], &self.states[from], world);
         self.cursor = to;
         self.revision += 1;
+        // An undone run brings back what it removed (brief S-7).
+        if undone == intent::name::SIMULATE
+            && world.contains_resource::<Messages<gradiance_domain::lifetime::ClearRemovals>>()
+        {
+            world.write_message(gradiance_domain::lifetime::ClearRemovals);
+        }
         debug!(name = undone, "command undone");
         Some(undone)
     }
@@ -535,6 +542,9 @@ impl Plugin for CommandPlugin {
         app.register_type::<gradiance_domain::tracer::Tracer>();
         app.register_type::<gradiance_domain::motion::InitialMotion>();
         app.register_type::<gradiance_domain::optics::Optics>();
+        app.register_type::<gradiance_domain::lifetime::Lifetime>();
+        app.register_type::<gradiance_domain::surface::SurfaceSpeed>();
+        app.register_type::<gradiance_domain::texture::BodyTexture>();
         app.add_systems(
             Update,
             dispatch::dispatch_intents.in_set(CommandDispatchSet),

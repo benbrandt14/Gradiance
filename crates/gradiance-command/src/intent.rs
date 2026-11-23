@@ -82,6 +82,14 @@ pub mod name {
     /// A settled edit to the scene-content settings (gravity, render style,
     /// lighting, scenery), recorded as one undo step.
     pub const SETTINGS: &str = "settings";
+    /// [`LiquifyIntent`](super::LiquifyIntent) → `LiquifyCommand`
+    /// (brief S-11).
+    pub const LIQUIFY: &str = "liquify";
+    /// [`SpongeIntent`](super::SpongeIntent) → `SpongeCommand`
+    /// (brief S-12).
+    pub const SPONGE: &str = "sponge";
+    /// [`EraseIntent`](super::EraseIntent) → `EraseCommand` (brief S-16).
+    pub const ERASE: &str = "erase";
 }
 
 /// Request to spawn one fully-specified body.
@@ -106,6 +114,31 @@ pub struct SpawnNodeIntent {
 pub struct DeleteIntent {
     /// Bodies to delete.
     pub targets: Vec<StableId>,
+}
+
+/// Request to turn bodies into water (brief S-11): delete `targets` and
+/// spawn the water emitters `emitters`, as one undo step.
+// Trace: dispatch.rs → LiquifyCommand (spawn.rs) → DeleteCommand + SpawnCommand; particles fill when the run plays (physics::particles).
+#[derive(Message, Debug, Clone, Reflect)]
+pub struct LiquifyIntent {
+    /// Bodies to delete.
+    pub targets: Vec<StableId>,
+    /// The emitter nodes that take their place.
+    pub emitters: Vec<gradiance_scene::NodeRecord>,
+}
+
+/// Request to turn a body into a sponge (brief S-12): delete `target` and
+/// spawn the lattice `bodies` and their spring `joints` as one new group,
+/// one undo step.
+// Trace: dispatch.rs → SpongeCommand (rod_cmd.rs) → DeleteCommand + SpawnRodCommand; the group id is minted at apply.
+#[derive(Message, Debug, Clone, Reflect)]
+pub struct SpongeIntent {
+    /// The body to replace.
+    pub target: StableId,
+    /// The lattice circles (ids minted by the operation).
+    pub bodies: Vec<BodyRecord>,
+    /// The springs between lattice neighbours.
+    pub joints: Vec<gradiance_scene::JointRecord>,
 }
 
 /// Request to duplicate a set of bodies at an offset.
@@ -285,6 +318,17 @@ pub struct CutIntent {
     /// Stroke end, world space.
     pub b: Vec2,
     /// Stroke width, world metres.
+    pub width: f32,
+}
+
+/// Request to erase a brush stroke from every body it touches (brief
+/// S-16): the sketch tool's erase mode and `(erase path width)`.
+// Trace: dispatch.rs → EraseCommand (cut_cmd.rs) → sync_colliders, sync_body_meshes (pieces replace each touched body).
+#[derive(Message, Debug, Clone, Reflect)]
+pub struct EraseIntent {
+    /// The stroke, world space.
+    pub line: Vec<Vec2>,
+    /// The brush width, world metres.
     pub width: f32,
 }
 

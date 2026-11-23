@@ -8,6 +8,11 @@
 //! The commit invokes the `body.sketch` operation, which builds the shape
 //! (`geometry::sketch`) and spawns it as **one** undo step; during the drag
 //! only the gizmo preview exists.
+//!
+//! Erase mode (brief S-16): a stroke begun with **Alt** held erases instead.
+//! Release invokes `body.erase` with the same stroke and width: the brush
+//! is subtracted from every body it touches, one undo step. The preview
+//! draws the brush in the danger ink.
 
 use crate::selection::Selection;
 use crate::tools::context::{
@@ -15,7 +20,7 @@ use crate::tools::context::{
 };
 use bevy::prelude::*;
 use gradiance_domain::theme::Role;
-use gradiance_geometry::sketch::{MAX_STROKE_POINTS, rdp, sketch_shape};
+use gradiance_geometry::sketch::{MAX_STROKE_POINTS, Sketch, brush_shape, rdp, sketch_shape};
 
 /// The stroke records a point each time the pointer has moved this far
 /// (screen pixels), before any thinning.
@@ -33,6 +38,8 @@ pub struct SketchDraft {
     /// The sampling distance multiplier: doubles each time the stroke is
     /// halved to stay within [`MAX_STROKE_POINTS`].
     spacing: f32,
+    /// The stroke erases (Alt held at the press, brief S-16).
+    pub erase: bool,
 }
 
 impl Default for SketchDraft {
@@ -40,6 +47,7 @@ impl Default for SketchDraft {
         Self {
             path: Vec::new(),
             spacing: 1.0,
+            erase: false,
         }
     }
 }
@@ -78,6 +86,16 @@ impl SketchDraft {
         }
     }
 
+    /// What release would make of `path` at `width`: the body a sketch
+    /// draws, or the brush an erase subtracts.
+    fn shape_of(&self, path: &[Vec2], width: f32) -> Option<Sketch> {
+        if self.erase {
+            brush_shape(path, width / 2.0)
+        } else {
+            sketch_shape(path, width / 2.0)
+        }
+    }
+
     /// The stroke with the pointer's current point as its end.
     fn stroke_to(&self, end: Option<Vec2>) -> Vec<Vec2> {
         let mut path = self.path.clone();
@@ -100,7 +118,10 @@ impl ManipTool for SketchDraft {
         let pointer = ctx.raw_cursor.or(ctx.cursor);
         match ctx.left {
             GesturePhase::Pressed => match pointer {
-                Some(p) => self.begin(p),
+                Some(p) => {
+                    self.begin(p);
+                    self.erase = ctx.alt;
+                }
                 None => self.path.clear(),
             },
             GesturePhase::Held => {
@@ -114,10 +135,11 @@ impl ManipTool for SketchDraft {
                 let stroke = rdp(&self.stroke_to(pointer), THIN_PX * ctx.cam_scale);
                 self.path.clear();
                 let width = ctx.defaults.sketch_width.0;
-                if sketch_shape(&stroke, width / 2.0).is_some() {
+                if self.shape_of(&stroke, width).is_some() {
                     return ManipOutput::commit(ToolCommit::Sketch {
                         path: stroke,
                         width,
+                        erase: self.erase,
                     });
                 }
             }
@@ -138,8 +160,13 @@ impl ManipTool for SketchDraft {
         // The hand's stroke, faint; over it, what release would make: the
         // simplified centre line with a ring of the stroke's width at each
         // joint, or the closed outline a loop fills.
-        out.polyline(path.clone(), Role::Preview.alpha(0.4));
-        let Some(sketch) = sketch_shape(&path, ctx.defaults.sketch_width.0 / 2.0) else {
+        let role = if self.erase {
+            Role::Danger
+        } else {
+            Role::Preview
+        };
+        out.polyline(path.clone(), role.alpha(0.4));
+        let Some(sketch) = self.shape_of(&path, ctx.defaults.sketch_width.0) else {
             return;
         };
         let mut line = sketch.line;
@@ -147,13 +174,13 @@ impl ManipTool for SketchDraft {
             if let Some(first) = line.first().copied() {
                 line.push(first);
             }
-            out.polyline(line, Role::Preview);
+            out.polyline(line, role);
         } else {
             let radius = sketch.radius.max(ctx.cam_scale);
             for p in &line {
-                out.circle(*p, radius, Role::Preview.alpha(0.6));
+                out.circle(*p, radius, role.alpha(0.6));
             }
-            out.polyline(line, Role::Preview);
+            out.polyline(line, role);
         }
     }
 }
@@ -161,10 +188,11 @@ impl ManipTool for SketchDraft {
 /// The `body.sketch` invocation for a sketch commit: the operation builds
 /// the shape, so a drawn sketch and a scripted one are the same record and
 /// Adjust Last Operation can change its width afterwards.
-pub fn sketch_invocation(path: &[Vec2], width: f32) -> gradiance_op::InvokeOp {
+/// An erase stroke invokes `body.erase` with the same parameters.
+pub fn sketch_invocation(path: &[Vec2], width: f32, erase: bool) -> gradiance_op::InvokeOp {
     let flat: Vec<f32> = path.iter().flat_map(|p| [p.x, p.y]).collect();
     gradiance_op::InvokeOp::with(
-        "body.sketch",
+        if erase { "body.erase" } else { "body.sketch" },
         gradiance_op::json!({ "path": flat, "width": width }),
     )
 }
@@ -200,8 +228,11 @@ mod tests {
 
     #[test]
     fn the_invocation_flattens_the_path() {
-        let invoke = sketch_invocation(&[Vec2::ZERO, Vec2::new(1.0, 2.0)], 0.1);
+        let invoke = sketch_invocation(&[Vec2::ZERO, Vec2::new(1.0, 2.0)], 0.1, false);
         assert_eq!(invoke.id, "body.sketch");
+        let erase = sketch_invocation(&[Vec2::ZERO, Vec2::new(1.0, 2.0)], 0.1, true);
+        assert_eq!(erase.id, "body.erase");
+        assert_eq!(erase.params, invoke.params);
         assert_eq!(
             invoke.params["path"],
             gradiance_op::json!([0.0, 0.0, 1.0, 2.0])

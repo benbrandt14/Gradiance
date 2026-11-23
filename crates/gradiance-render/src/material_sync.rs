@@ -98,6 +98,10 @@ fn body_material(
             ramp: ramp_of(settings),
             // `toon::attach_face_fields` hands over the body's baked field.
             field: None,
+            // `texture_sync::attach_textures` hands over the body's image.
+            image_u: Vec4::ZERO,
+            image_v: Vec4::ZERO,
+            image: None,
         },
     }
 }

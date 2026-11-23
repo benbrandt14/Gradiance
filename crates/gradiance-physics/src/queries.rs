@@ -59,6 +59,8 @@ pub struct PhysicsQueries<'w, 's> {
     gravity: Option<Res<'w, Gravity>>,
     /// Each body's acceleration over the last step (brief S-2).
     accelerations: Query<'w, 's, &'static crate::acceleration::BodyAcceleration>,
+    /// The bodies that started a contact in the last step (brief S-7).
+    hits: Option<Res<'w, crate::lifetime::ContactHits>>,
     sleeping: Query<'w, 's, Has<Sleeping>>,
     contacts: Res<'w, ContactGraph>,
     /// Authored joint definitions — read for the joint sensor reads; body
@@ -388,6 +390,15 @@ impl BodyRead for LiveBody<'_, '_, '_> {
             .get(self.entity)
             .ok()
             .map(|a| a.value)
+    }
+
+    fn hit(&self) -> Option<bool> {
+        Some(
+            self.physics
+                .hits
+                .as_ref()
+                .is_some_and(|hits| hits.0.contains(&self.entity)),
+        )
     }
 }
 

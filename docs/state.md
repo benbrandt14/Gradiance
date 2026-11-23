@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-21 (Phase S under way: S-1 merged as #306, roadmap,
+Last updated: 2026-11-22 (S-5 gears, S-6 quick actions and S-7 lifetime, S-8 conveyors, S-9 camera views, S-10 water spike, S-11 liquify and water tool, S-12 sponge, S-13 body images, S-14 shape from an image, S-15 dispersion, S-16 brush erase, S-17 scene browser, S-18 share file, S-19 string table, S-20 gamepad input, S-21 touch gestures, S-22 air buoyancy done; Phase S under way: S-1 merged as #306, roadmap,
 audit and phase plan aligned; Q-9 closed as not reproducible on main `8f7c547`; Phase Q merged
 as #305; earlier history in git).
 
@@ -33,7 +33,41 @@ as #305; earlier history in git).
   **S-2** readouts (area, inertia, potential energy, acceleration) and the
   phase plot are done (#309); **S-2b** per-body motion arrows (#310) and
   **S-3** laser refraction and beam colour are done.
-  **Next:** S-5 gear outline and tool, then S-6..S-22 in number order (S-4 material
+  From 2026-11-22 a project thread runs Phase S as stacked PRs from
+  `claude/project-thread-xnxxfh` (#312: the two open Phase S defects, a
+  paused `place` lost after the first step and Adjust Last `drag null`).
+  **S-5** gears are done: rack-generated teeth, `spawn-gear`, `make-gear`,
+  the Gear tool; a polygon leaf now collides as its exact convex partition
+  (see its Outcome). **S-6** quick actions are done (`loosen`,
+  `pin-centre`, `thruster-centre`, `to-circle`, `brake`, one context-menu
+  table). **S-7** is done: the `hit` pulse, remove on contact and time to
+  live (`set-lifetime`); removal is a derived `Removed` marker that an
+  undone run clears. **S-8** conveyors are done (`set-surface-speed`, an
+  avian collision hook). **S-9** camera follow, frame and look are done.
+  **S-10** particle water spike is done (`docs/particle-fluid-decision.md`).
+  **S-11** liquify, the water tool and drain are done: the authored record is
+  a `WaterEmitter` node; its particles fill when the run plays.
+  **S-12** "Make sponge" is done: circles joined by springs, one group.
+  **S-13** body images are done: `BodyTexture` (a file path) on the front
+  face, toon or raw; there is no 3D render snapshot harness yet.
+  **S-14** "Import image as body" is done: the opaque pixels traced once
+  into a `Polygon` (no new leaf), the image on its face.
+  **S-15** dispersion is done: `Optics.dispersion` (Cauchy B), a white
+  laser traces 7 colours and fans at a prism.
+  **S-16** brush erase is done: Alt+drag in the sketch tool, `(erase path width)`.
+  **S-17** the Scenes panel is done: thumbnails drawn from the records as
+  `a.png` beside `a.ron`; open, rename, trash to `.trash/`.
+  **S-18** File > Share is done: one stored `.zip` (scene, thumbnail,
+  images); `scene.load` opens it.
+  **S-19** the string table is done for the menu bar and Scenes panel
+  (`assets/lang/en.ron`, `ui::text`); other panels ratchet down.
+  **S-20** gamepad input is done: `(defpad name input)` and the node
+  graph's Pad block publish a stick or button on the bus in play.
+  **S-21** touch and trackpad camera gestures are done
+  (`interaction::camera_gestures`; platform table in its docs).
+  **S-22** air buoyancy is done: `SimSettings.air_buoyancy` (off by
+  default) lifts every body by the weight of the air it displaces.
+  **Next:** S-11..S-22 in number order (S-4 material
   presets rejected by the owner, 2026-11-21, #307).
   **Phase Q is merged (#305):** Q-2..Q-6 and Q-8 done, Q-7 returned (avian
   reports a standing joint correction as velocity; ignored repro,

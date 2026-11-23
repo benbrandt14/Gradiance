@@ -32,8 +32,8 @@ pub(crate) const NOT_UNDONE: &[(&str, &str)] = &[
 /// whose example does change the scene fails the test, so the list cannot rot.
 const IDENTITY_ON_FIXTURE: &[(&str, &str)] = &[(
     "body.mirror_v",
-    "every fixture body is a circle on y = 1, so a vertical mirror about the \
-     bounds centre maps the scene onto itself",
+    "every fixture body is a circle or a box centred on y = 1, so a vertical \
+     mirror about the bounds centre maps the scene onto itself",
 )];
 
 /// The scene as `scene.dump` returns it, minus [`NOT_UNDONE`].

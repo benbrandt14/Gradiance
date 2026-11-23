@@ -256,6 +256,7 @@ fn action_label(action: EditorAction) -> String {
         EditorAction::Ungroup => "ungroups".to_owned(),
         EditorAction::Copy => "copies".to_owned(),
         EditorAction::Paste => "pastes".to_owned(),
+        EditorAction::FrameSelection => "frames the selection".to_owned(),
         EditorAction::Tool(tool) => format!("picks the {tool:?} tool"),
     }
 }

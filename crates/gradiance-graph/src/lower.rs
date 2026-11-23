@@ -153,6 +153,9 @@ fn signal_expr(graph: &Graph, node: &Node) -> Result<SignalExpr, GraphError> {
                 None => held(key),
             }
         }
+        NodeKind::Pad { input, dead_zone } => {
+            SignalExpr::Input(gradiance_domain::pad::pad_input_name(input, *dead_zone))
+        }
         NodeKind::Param { value, .. } => SignalExpr::Const(*value),
         NodeKind::Expr(expr) => {
             let names = expr.inputs();

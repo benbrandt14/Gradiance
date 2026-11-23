@@ -179,6 +179,7 @@
             drag_coefficient: 0.0,
             linear_drag: 0.0,
             wind: (0.0, 0.0),
+            air_buoyancy: false,
         ),
         grid: (
             visible: true,

@@ -769,28 +769,29 @@ Each gap below reuses an existing seam; one brief each, in this order:
 3. **S-3** laser refraction (refractive index, Snell, total internal
    reflection) and beam colour — done.
 4. ~~S-4 material presets~~ — rejected by the owner (2026-11-21).
-5. **S-5** gear outline + gear tool (meshing by contact, no constraint).
+5. **S-5** gear outline + gear tool (meshing by contact, no constraint) —
+   done.
 6. **S-6** context quick actions: loosen, centre pin, centre thruster,
-   to circle, motor brake.
+   to circle, motor brake — done.
 7. **S-7** contact hit pulse signal, removal on contact, time to live
-   (derived for the run, undone with it).
-8. **S-8** surface velocity (conveyor); returns if avian 0.8 has no
-   contact tangent speed.
-9. **S-9** camera follow, frame selection, camera verbs.
+   (derived for the run, undone with it) — done.
+8. **S-8** surface velocity (conveyor) — done (avian 0.8 has the
+   contact tangent speed).
+9. **S-9** camera follow, frame selection, camera verbs — done.
 
 Added 2026-11-21 (owner: "include the others"):
 
 10. **S-10** particle fluid: spike + decision note (method, body
-    coupling, budget). 11. **S-11** liquify, water fill, drain (after S-10).
-12. **S-12** sponge: a spring lattice inside the outline.
-13. **S-13** image texture on a body (through the toon ramp or raw).
-14. **S-14** shape from an image (alpha → field leaf or traced polygon).
-15. **S-15** dispersion and white light (after S-3).
-16. **S-16** brush erase mode of the sketch tool.
-17. **S-17** scene browser with thumbnails. 18. **S-18** share a scene
-    as one file (no server). 19. **S-19** language choice (string table).
-20. **S-20** gamepad input on the bus. 21. **S-21** trackpad and touch
-    gestures. 22. **S-22** air buoyancy.
+    coupling, budget) — done. 11. **S-11** liquify, water fill, drain — done.
+12. **S-12** sponge: a spring lattice inside the outline — done.
+13. **S-13** image texture on a body (through the toon ramp or raw) — done.
+14. **S-14** shape from an image (alpha → field leaf or traced polygon) — done (traced polygon).
+15. **S-15** dispersion and white light (after S-3) — done.
+16. **S-16** brush erase mode of the sketch tool — done.
+17. **S-17** scene browser with thumbnails — done. 18. **S-18** share a scene
+    as one file (no server) — done. 19. **S-19** language choice (string table) — done (menus; panels ratchet).
+20. **S-20** gamepad input on the bus — done. 21. **S-21** trackpad and touch
+    gestures — done. 22. **S-22** air buoyancy — done.
 
 **Rejected:** material presets (owner, 2026-11-21); sketch gesture
 grammar (no shape recognition, owner 2026-11-21); notes and tutorials

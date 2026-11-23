@@ -19,10 +19,12 @@
 
 pub mod align;
 pub mod camera;
+pub mod camera_gestures;
 pub mod cursor;
 pub mod debug_ops;
 pub mod gesture;
 pub mod graph_keys;
+pub mod graph_pads;
 pub mod indicators;
 pub mod input;
 pub mod joint_edit;
@@ -113,6 +115,7 @@ impl Plugin for InteractionPlugin {
         app.add_message::<pack::PackControl>();
         app.init_resource::<camera::CameraRig>();
         app.init_resource::<camera::CameraScale>();
+        app.add_message::<camera::CameraRequest>();
 
         // The operation registry: the selection mirror `"selection"` targets
         // resolve against (menus and keys), and an invoked key edit becomes a
@@ -131,6 +134,7 @@ impl Plugin for InteractionPlugin {
         app.add_plugins(input::EditorInputPlugin);
 
         graph_keys::install(app);
+        graph_pads::install(app);
         app.add_plugins(tools::ToolsPlugin);
 
         // After `InputSystems`: the button edges and the cursor must describe
@@ -154,6 +158,9 @@ impl Plugin for InteractionPlugin {
                 camera::apply_projection
                     .run_if(resource_changed::<gradiance_domain::settings::ScenerySettings>),
                 camera::pan_and_zoom_camera,
+                camera_gestures::touch_and_trackpad,
+                camera::apply_camera_requests,
+                camera::follow_and_glide,
                 camera::apply_camera_rig,
                 input::apply_shortcuts,
                 selection::prune_dead_selection,

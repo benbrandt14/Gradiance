@@ -214,6 +214,33 @@ pub enum ToolCommit {
         path: Vec<Vec2>,
         /// Stroke width (metres).
         width: f32,
+        /// Erase the stroke from the bodies it touches instead
+        /// (`body.erase`, brief S-16).
+        erase: bool,
+    },
+    /// Draw a spur gear (the gear tool, brief S-5): invokes the
+    /// `body.spawn_gear` operation, one undo step.
+    Gear {
+        /// Centre, world space.
+        center: Vec2,
+        /// Pitch radius (metres).
+        radius: f32,
+    },
+    /// Fill a rectangle with water (the water tool, brief S-11): invokes
+    /// the `water.fill` operation, one undo step.
+    Water {
+        /// Lower-left corner, world space.
+        min: Vec2,
+        /// Upper-right corner, world space.
+        max: Vec2,
+    },
+    /// Place a body's image (the texture tool, brief S-13): invokes the
+    /// `body.place_texture` operation, one undo step.
+    Texture {
+        /// The body.
+        id: StableId,
+        /// The image's new placement.
+        texture: gradiance_domain::texture::BodyTexture,
     },
     /// A script tool's gesture completed: run its body once with these
     /// points (the script tool). Not an authoring intent itself — the script
@@ -466,12 +493,26 @@ impl ToolCommitWriters<'_> {
                         &path, link, width, ends, pins,
                     ));
             }
-            ToolCommit::Sketch { path, width } => {
+            ToolCommit::Sketch { path, width, erase } => {
                 // Through the operation, like the chain: one lowering for
                 // the tool and the verb, and Adjust Last Operation can
                 // change the width afterwards.
                 self.invoke
-                    .write(crate::tools::sketch_tool::sketch_invocation(&path, width));
+                    .write(crate::tools::sketch_tool::sketch_invocation(
+                        &path, width, erase,
+                    ));
+            }
+            ToolCommit::Gear { center, radius } => {
+                self.invoke
+                    .write(crate::tools::gear_tool::gear_invocation(center, radius));
+            }
+            ToolCommit::Texture { id, texture } => {
+                self.invoke
+                    .write(crate::tools::texture_tool::place_invocation(id, &texture));
+            }
+            ToolCommit::Water { min, max } => {
+                self.invoke
+                    .write(crate::tools::water_tool::water_invocation(min, max));
             }
             ToolCommit::Script { tool, points } => {
                 self.script_tools
@@ -646,6 +687,7 @@ pub struct ToolWorld<'w, 's> {
     kinds: Query<'w, 's, &'static RigidBody, With<Body>>,
     joints: Query<'w, 's, &'static gradiance_domain::joint::JointDef>,
     node_kinds: Query<'w, 's, &'static gradiance_domain::node::NodeKind>,
+    textures: Query<'w, 's, &'static gradiance_domain::texture::BodyTexture, With<Body>>,
     index: Res<'w, gradiance_core::ids::IdIndex>,
 }
 
@@ -663,6 +705,20 @@ impl ToolWorld<'_, '_> {
     /// infinite ground sorts last).
     pub fn topmost_body_at(&self, p: Vec2) -> Option<Entity> {
         super::topmost_body_at(p, &self.physics, &self.hit)
+    }
+
+    /// The topmost body at `p` that shows an image (brief S-13): its id,
+    /// its pose and its texture.
+    pub fn texture_at(
+        &self,
+        p: Vec2,
+    ) -> Option<(StableId, PosRot, gradiance_domain::texture::BodyTexture)> {
+        self.bodies_at(p).into_iter().find_map(|entity| {
+            let texture = self.textures.get(entity).ok()?;
+            let (_, transform) = self.shapes.get(entity).ok()?;
+            let id = self.ids.get(entity).ok()?;
+            Some((*id, PosRot::from_transform(transform), texture.clone()))
+        })
     }
 
     /// Every authored body at a point, topmost first.

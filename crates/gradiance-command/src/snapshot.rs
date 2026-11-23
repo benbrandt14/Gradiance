@@ -58,6 +58,12 @@ pub struct BodySnapshot {
     /// The refractive index, if any: the old half of a `set-index` edit
     /// (brief S-3).
     pub optics: Option<gradiance_domain::optics::Optics>,
+    /// Removal during a run (brief S-7).
+    pub lifetime: Option<gradiance_domain::lifetime::Lifetime>,
+    /// The conveyor speed, if any (brief S-8).
+    pub surface: Option<gradiance_domain::surface::SurfaceSpeed>,
+    /// The front-face image, if any (brief S-13).
+    pub texture: Option<gradiance_domain::texture::BodyTexture>,
 }
 
 impl BodySnapshot {
@@ -94,9 +100,16 @@ pub struct SceneSnapshot {
     /// The committed scene's behaviour nodes, in `StableId` order: what a
     /// delete may name besides a body.
     pub nodes: Vec<StableId>,
+    /// The water emitters among the nodes, in id order (brief S-11): what
+    /// `drain` removes.
+    pub water: Vec<StableId>,
     /// The bodies each joint connects (`None`: pinned to the world), in
     /// joint id order: what connectivity decompose walks.
     pub joint_links: Vec<(StableId, Option<StableId>)>,
+    /// Every joint's definition with its id, in joint id order: the old
+    /// value a joint edit (`joint.brake`) needs, and the joints a body's
+    /// `body.loosen` drops (brief S-6).
+    pub joint_defs: Vec<(StableId, JointDef)>,
     /// The group names (scene content).
     pub group_names: GroupNames,
 }
@@ -207,16 +220,29 @@ pub fn snapshot_scene(world: &mut World) -> SceneSnapshot {
                     .get::<gradiance_domain::motion::InitialMotion>()
                     .copied(),
                 optics: entity.get::<gradiance_domain::optics::Optics>().copied(),
+                lifetime: entity
+                    .get::<gradiance_domain::lifetime::Lifetime>()
+                    .copied(),
+                surface: entity
+                    .get::<gradiance_domain::surface::SurfaceSpeed>()
+                    .copied(),
+                texture: entity
+                    .get::<gradiance_domain::texture::BodyTexture>()
+                    .cloned(),
             }
         })
         .collect();
     rows.sort_by_key(|b| b.id.0);
-    let mut links: Vec<(StableId, StableId, Option<StableId>)> = world
+    let mut joint_defs: Vec<(StableId, JointDef)> = world
         .query_filtered::<(&StableId, Option<&JointDef>), With<gradiance_domain::Joint>>()
         .iter(world)
-        .filter_map(|(id, def)| def.map(|d| (*id, d.body_a, d.body_b)))
+        .filter_map(|(id, def)| def.map(|d| (*id, d.clone())))
         .collect();
-    links.sort_by_key(|(id, ..)| id.0);
+    joint_defs.sort_by_key(|(id, _)| id.0);
+    let links: Vec<(StableId, Option<StableId>)> = joint_defs
+        .iter()
+        .map(|(_, d)| (d.body_a, d.body_b))
+        .collect();
     let mut joints: Vec<StableId> = world
         .query_filtered::<&StableId, With<gradiance_domain::Joint>>()
         .iter(world)
@@ -233,11 +259,20 @@ pub fn snapshot_scene(world: &mut World) -> SceneSnapshot {
         .copied()
         .collect();
     nodes.sort_by_key(|id| id.0);
+    let mut water: Vec<StableId> = world
+        .query::<(&StableId, &gradiance_domain::node::NodeKind)>()
+        .iter(world)
+        .filter(|(_, kind)| matches!(kind, gradiance_domain::node::NodeKind::Water(_)))
+        .map(|(id, _)| *id)
+        .collect();
+    water.sort_by_key(|id| id.0);
     SceneSnapshot {
         joints,
         nodes,
+        water,
         bodies: rows,
-        joint_links: links.into_iter().map(|(_, a, b)| (a, b)).collect(),
+        joint_links: links,
+        joint_defs,
         group_names,
     }
 }

@@ -39,3 +39,27 @@ Freezing water back into a body. Per-particle colour.
 - Undo matrix covers the three operations. Gates green.
 
 ## Outcome
+
+Done (2026-11-22).
+
+- **Record:** `domain::water::WaterEmitter` (outline relative to the node,
+  spacing 0.02 to 0.5 m, default 0.04 m), saved as
+  `NodeKind::Water`. The emitter is a free node, so delete, undo, save and
+  the outliner treat it like a thruster. Decision `water-emitter-is-a-node`.
+- **Fill:** `physics::particles::fill_from_emitters` fills each emitter
+  once as the run plays, on the lattice `geometry::lattice::fill_polygon`.
+  `drop_stale_water` takes out the particles of a gone emitter and all of
+  them when a run is undone. One water per scene: the first emitter sets
+  the spacing (decision `one-water-per-scene`).
+- **Operations:** `body.liquify` (`(liquify i)`, context row "Liquify"; it
+  skips grounds and fluid regions), `water.fill` (`(add-water path)`, the
+  water tool's commit), `water.drain` (`(drain)`). Each is one undo step.
+- **Tool:** `ToolState::Water`, palette "Create", no key, the `cloud` icon
+  (the set has no water icon). Drag a rectangle.
+- **Tests:** `tests/it/water.rs` (liquify keeps the area within 5 %, undo
+  restores the body exactly; fill and drain), the conformance fixture has
+  a water emitter, the undo matrix covers the three operations,
+  `water_tool` and `lattice` unit tests.
+- **Measured:** a 1 × 0.6 m box liquifies to particles within 5 % of
+  its area.
+

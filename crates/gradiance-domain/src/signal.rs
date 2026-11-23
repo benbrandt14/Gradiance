@@ -53,6 +53,9 @@ pub enum SignalSource {
     /// The magnitude of a body's acceleration over the last step (m/s²,
     /// brief S-2).
     Acceleration(StableId),
+    /// 1 on the physics step a body starts touching another, else 0
+    /// (brief S-7).
+    HitPulse(StableId),
     /// Distance between a **joint's** two world anchors (m) — keyed by the
     /// joint's [`StableId`], read via `JointDef::sensor_state`.
     JointLength(StableId),
@@ -387,6 +390,7 @@ impl SignalSource {
             Self::Inertia(id) => ("inertia", id),
             Self::PotentialEnergy(id) => ("potential", id),
             Self::Acceleration(id) => ("accel", id),
+            Self::HitPulse(id) => ("hit", id),
             Self::JointLength(id) => ("jlength", id),
             Self::JointAngle(id) => ("jangle", id),
             Self::JointForce(id) => ("jforce", id),
@@ -415,6 +419,7 @@ impl SignalSource {
             Self::Inertia(_) => "inertia",
             Self::PotentialEnergy(_) => "potential-energy",
             Self::Acceleration(_) => "acceleration",
+            Self::HitPulse(_) => "hit",
             Self::JointLength(_) => "joint-length",
             Self::JointAngle(_) => "joint-angle",
             Self::JointForce(_) => "joint-force",
@@ -444,6 +449,7 @@ impl SignalSource {
             | Self::Inertia(id)
             | Self::PotentialEnergy(id)
             | Self::Acceleration(id)
+            | Self::HitPulse(id)
             | Self::JointLength(id)
             | Self::JointAngle(id)
             | Self::JointForce(id) => Subjects::One(*id),
@@ -476,6 +482,7 @@ impl SignalSource {
             ("inertia", Subjects::One(id)) => Self::Inertia(id),
             ("potential-energy", Subjects::One(id)) => Self::PotentialEnergy(id),
             ("acceleration", Subjects::One(id)) => Self::Acceleration(id),
+            ("hit", Subjects::One(id)) => Self::HitPulse(id),
             ("joint-length", Subjects::One(id)) => Self::JointLength(id),
             ("joint-angle", Subjects::One(id)) => Self::JointAngle(id),
             ("joint-force", Subjects::One(id)) => Self::JointForce(id),
@@ -521,6 +528,7 @@ impl SignalSource {
             "inertia" => Self::Inertia(sid),
             "potential" => Self::PotentialEnergy(sid),
             "accel" => Self::Acceleration(sid),
+            "hit" => Self::HitPulse(sid),
             "jlength" => Self::JointLength(sid),
             "jangle" => Self::JointAngle(sid),
             "jforce" => Self::JointForce(sid),
@@ -546,6 +554,7 @@ impl SignalSource {
             Self::Inertia(a) => (Self::Inertia(one(*a).0), one(*a).1),
             Self::PotentialEnergy(a) => (Self::PotentialEnergy(one(*a).0), one(*a).1),
             Self::Acceleration(a) => (Self::Acceleration(one(*a).0), one(*a).1),
+            Self::HitPulse(a) => (Self::HitPulse(one(*a).0), one(*a).1),
             Self::JointLength(a) => (Self::JointLength(one(*a).0), one(*a).1),
             Self::JointAngle(a) => (Self::JointAngle(one(*a).0), one(*a).1),
             Self::JointForce(a) => (Self::JointForce(one(*a).0), one(*a).1),
@@ -1013,6 +1022,20 @@ pub enum BlockOp {
         /// The key that drives it to `-1` (`None`: a single key, `0`/`1`).
         negative: Option<String>,
     },
+    /// A **gamepad input** (brief S-20): a stick's position (−1..1) or a
+    /// button's travel (0..1) during play, `0` paused. Inputs are saved by
+    /// name ([`pad`](crate::pad)); within `dead_zone` of rest the output is
+    /// `0`, and the rest of the travel is rescaled to reach `±1`. The value
+    /// reaches the kernel as the bus input
+    /// [`pad_input_name`](crate::pad::pad_input_name) names, published each
+    /// frame by the interaction layer (derived, never saved, never undone).
+    Pad {
+        /// The stick or button (`LeftStickX`, `South`, `RightTrigger2`).
+        input: String,
+        /// Travel near rest that reads 0 (0..0.9).
+        #[serde(default)]
+        dead_zone: f32,
+    },
 }
 
 /// The bus-input prefix of a key's held state (`key@E`): the same
@@ -1073,6 +1096,9 @@ impl BlockOp {
                     None => held(key),
                 }
             }
+            Self::Pad { input, dead_zone } => {
+                SignalExpr::Input(crate::pad::pad_input_name(input, *dead_zone))
+            }
         }
     }
 
@@ -1080,9 +1106,11 @@ impl BlockOp {
     /// input pins — empty for source blocks.
     pub fn input_slots(&self) -> Vec<(&'static str, Option<String>)> {
         match self {
-            Self::Time | Self::Constant { .. } | Self::Oscillator { .. } | Self::Key { .. } => {
-                Vec::new()
-            }
+            Self::Time
+            | Self::Constant { .. }
+            | Self::Oscillator { .. }
+            | Self::Key { .. }
+            | Self::Pad { .. } => Vec::new(),
             Self::Gain { input, .. } | Self::Abs { input } | Self::Curve { input, .. } => {
                 vec![("in", input.clone())]
             }
@@ -1099,7 +1127,11 @@ impl BlockOp {
     /// Sets input slot `i` to `name` (`None` = disconnect).
     pub fn set_input(&mut self, i: usize, name: Option<String>) {
         match self {
-            Self::Time | Self::Constant { .. } | Self::Oscillator { .. } | Self::Key { .. } => {}
+            Self::Time
+            | Self::Constant { .. }
+            | Self::Oscillator { .. }
+            | Self::Key { .. }
+            | Self::Pad { .. } => {}
             Self::Gain { input, .. } | Self::Abs { input } | Self::Curve { input, .. } => {
                 if i == 0 {
                     *input = name;
@@ -1132,6 +1164,7 @@ impl BlockOp {
             Self::Max { .. } => "max",
             Self::Curve { .. } => "curve",
             Self::Key { .. } => "key",
+            Self::Pad { .. } => "pad",
         }
     }
 }

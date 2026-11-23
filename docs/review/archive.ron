@@ -5019,5 +5019,896 @@ Settings are global, so flip between the options rather than viewing them side b
             ),
             ingested_as: "FluidLook::default() = Flat (crates/gradiance-domain/src/settings.rs); goldens regenerated",
         ),
+        (
+            question: (
+                id: "adjust-last-omitted-optional",
+                title: "How does Adjust Last show an optional field the call left out?",
+                source: "Phase S defect (roadmap screenshot after set-fluid): the panel showed drag null",
+                description: r#"An operation with an Option field (set-fluid's drag, make-gear's teeth) picks a value when the call omits it. The Adjust Last panel printed the JSON null."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Read-only auto",
+                        caption: r#"The row reads auto, not editable: the panel does not know the value the operation picked, and a seeded number would show a value the body does not have."#,
+                    ),
+                    (
+                        label: "Editable, seeded with the example",
+                        caption: r#"An editable number starting at the operation's example value; one drag sets it, but before that it shows a wrong value."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "adjust-last-omitted-optional",
+                title: "How does Adjust Last show an optional field the call left out?",
+                choice: Picked("Read-only auto"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "crates/gradiance-ui/src/adjust_panel.rs short()",
+        ),
+        (
+            question: (
+                id: "gear-teeth-generated",
+                title: "How are gear teeth shaped?",
+                source: "Brief S-5",
+                description: r#"The brief allowed trapezoid or simplified involute teeth. Trapezoid teeth jammed a 12:24 pair in the behaviour test."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Rack-generated teeth",
+                        caption: r#"The basic rack rolls along the pitch circle and cuts the gaps: conjugate teeth with undercut, 20 samples a tooth, 6 to 48 teeth, backlash from a 0.44 tooth fraction."#,
+                    ),
+                    (
+                        label: "Trapezoid teeth",
+                        caption: r#"Four vertices a tooth; measured to jam after one tooth."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "gear-teeth-generated",
+                title: "How are gear teeth shaped?",
+                choice: Picked("Rack-generated teeth"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "crates/gradiance-geometry/src/gear.rs",
+        ),
+        (
+            question: (
+                id: "polygon-collider-exact",
+                title: "Which collider does a polygon leaf get?",
+                source: "Brief S-5 (gear jam)",
+                description: r#"avian's convex_decomposition is approximate: it made a 24-tooth gear two hulls and filled every tooth gap. The question covers every polygon leaf, not only gears."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Exact convex partition",
+                        caption: r#"Triangulate and merge to convex pieces (Hertel-Mehlhorn); every notch collides as drawn. More pieces (a 24-tooth gear: 96). The approximate decomposition stays as the fallback and for CSG contours."#,
+                    ),
+                    (
+                        label: "Approximate for all but gears",
+                        caption: r#"Keep the old collider for other polygons; needs a gear marker on the shape, and notches elsewhere keep filling."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "polygon-collider-exact",
+                title: "Which collider does a polygon leaf get?",
+                choice: Picked("Exact convex partition"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "crates/gradiance-geometry/src/partition.rs; crates/gradiance-physics/src/body_sync.rs partition_collider",
+        ),
+        (
+            question: (
+                id: "lifetime-removal-derived",
+                title: "How does a removed body leave the run?",
+                source: "S-7",
+                description: r#"Remove on contact and time to live must not despawn an authored entity outside a command."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Derived marker",
+                        caption: r#"A Removed marker disables the collider and the motion and hides the mesh; undo of the run clears it."#,
+                    ),
+                    (
+                        label: "Despawn by command",
+                        caption: r#"Each removal is a command; a run would flood the undo history and could not be undone as one step."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "lifetime-removal-derived",
+                title: "How does a removed body leave the run?",
+                choice: Picked("Derived marker"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "physics::lifetime",
+        ),
+        (
+            question: (
+                id: "surface-speed-sign",
+                title: "Which way does a positive surface speed run?",
+                source: "S-8",
+                description: r#"A conveyor needs one sign convention for its surface speed."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Counter-clockwise",
+                        caption: r#"Positive runs counter-clockwise along the outline (the brief's convention), so a positive top carries a load left."#,
+                    ),
+                    (
+                        label: "Rightward on top",
+                        caption: r#"Positive carries a load on the top to the right; the sign then depends on which face a load rests on."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "surface-speed-sign",
+                title: "Which way does a positive surface speed run?",
+                choice: Picked("Counter-clockwise"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "domain::surface",
+        ),
+        (
+            question: (
+                id: "particle-fluid-gate",
+                title: "How is the particle-water spike gated?",
+                source: "S-10",
+                description: r#"The brief asks for the spike behind a feature flag; CI builds only the default features."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Runtime gate",
+                        caption: r#"The step returns at once with no particles, and only code fills them, so CI runs the behaviour test."#,
+                    ),
+                    (
+                        label: "Cargo feature",
+                        caption: r#"The spike compiles only with a feature; CI would never build or test it."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "particle-fluid-gate",
+                title: "How is the particle-water spike gated?",
+                choice: Picked("Runtime gate"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "physics::particles",
+        ),
+        (
+            question: (
+                id: "particle-fluid-coupling",
+                title: "How do particles and bodies push each other?",
+                source: "S-10",
+                description: r#"avian has no particle API; the brief names two candidates."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Separate solver",
+                        caption: r#"Particles read bodies as SDFs and pay them equal and opposite impulses through Forces."#,
+                    ),
+                    (
+                        label: "Small avian bodies",
+                        caption: r#"2000 rigid bodies in the body solver, with no fluid pressure."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "particle-fluid-coupling",
+                title: "How do particles and bodies push each other?",
+                choice: Picked("Separate solver"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "docs/particle-fluid-decision.md",
+        ),
+        (
+            question: (
+                id: "water-emitter-is-a-node",
+                title: "The authored water is a node",
+                source: "S-11",
+                description: r#"Liquify and the water tool need an authored record that saves and undoes. The particles are derived (S-10)."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Emitter node",
+                        caption: r#"A WaterEmitter is a NodeKind: delete, undo, save and the outliner already handle nodes."#,
+                    ),
+                    (
+                        label: "New record kind",
+                        caption: r#"A separate WaterRecord list in the scene: more code for the same behaviour."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "water-emitter-is-a-node",
+                title: "The authored water is a node",
+                choice: Picked("Emitter node"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-11 (NodeKind::Water)",
+        ),
+        (
+            question: (
+                id: "one-water-per-scene",
+                title: "One water per scene",
+                source: "S-11",
+                description: r#"The particle store holds one spacing. Two emitters with different spacings cannot share it."#,
+                decision: true,
+                options: [
+                    (
+                        label: "First emitter sets it",
+                        caption: r#"The first emitter that fills sets the spacing of all water in the run."#,
+                    ),
+                    (
+                        label: "Many stores",
+                        caption: r#"One particle store per spacing: more cost per step and no coupling between them."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "one-water-per-scene",
+                title: "One water per scene",
+                choice: Picked("First emitter sets it"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-11 (fill_from_emitters)",
+        ),
+        (
+            question: (
+                id: "sponge-stiffness-default",
+                title: "Sponge stiffness and spacing defaults",
+                source: "S-12",
+                description: r#"Make sponge needs a stiffness and a spacing when the context row invokes it."#,
+                decision: true,
+                options: [
+                    (
+                        label: "12 Hz, six across",
+                        caption: r#"Springs at 12 Hz (damping 0.5); spacing 0 picks about six circles across. A 1 m sponge recovers to 98 % of its area."#,
+                    ),
+                    (
+                        label: "6 Hz",
+                        caption: r#"Softer, but a 1 m sponge sags to 87 % of its area under its own weight."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "sponge-stiffness-default",
+                title: "Sponge stiffness and spacing defaults",
+                choice: Picked("12 Hz, six across"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-12 (body.sponge)",
+        ),
+        (
+            question: (
+                id: "texture-path-only",
+                title: "A body image is saved as its path",
+                source: "S-13",
+                description: r#"The save is one RON file. An image can be embedded, copied next to the scene, or saved as a path."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Path only",
+                        caption: r#"The scene saves the path. A relative path resolves against the scene file's folder. Saving does not copy the image."#,
+                    ),
+                    (
+                        label: "Copy on save",
+                        caption: r#"Saving copies each image next to the scene file: safer to move, but a save writes files the person did not ask for."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "texture-path-only",
+                title: "A body image is saved as its path",
+                choice: Picked("Path only"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-13 (BodyTexture.path, SceneFolder)",
+        ),
+        (
+            question: (
+                id: "texture-tool-scale",
+                title: "Texture tool scales by Shift-drag",
+                source: "S-13",
+                description: r#"The brief asks for wheel = scale. The wheel zooms the canvas in every tool."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Shift-drag scales",
+                        caption: r#"Shift + left-drag scales the image about its centre; the wheel keeps zooming the canvas."#,
+                    ),
+                    (
+                        label: "Wheel scales",
+                        caption: r#"The wheel scales an image under the cursor; the canvas does not zoom while the texture tool is active over an image."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "texture-tool-scale",
+                title: "Texture tool scales by Shift-drag",
+                choice: Picked("Shift-drag scales"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-13 (texture_tool)",
+        ),
+        (
+            question: (
+                id: "texture-render-check",
+                title: "No render snapshot for body images yet",
+                source: "S-13",
+                description: r#"The brief asks for a lavapipe snapshot test of a textured box. The project has snapshot tests for egui panels only, none for the 3D view."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Manual check now",
+                        caption: r#"Check the shader on lavapipe with tools/screenshot, and leave a 3D snapshot harness to its own brief."#,
+                    ),
+                    (
+                        label: "Build the harness",
+                        caption: r#"Build a headless 3D render snapshot harness inside S-13: a large change outside the brief's scope."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "texture-render-check",
+                title: "No render snapshot for body images yet",
+                choice: Picked("Manual check now"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-13 (brief Outcome)",
+        ),
+        (
+            question: (
+                id: "image-import-polygon",
+                title: "An imported image becomes a polygon",
+                source: "S-14",
+                description: r#"Option A adds a sampled-grid SDF leaf that keeps the image editable. Option B traces the image once at import into a Polygon."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Traced polygon (B)",
+                        caption: r#"No new leaf and no format change; the outline is a polygon like any other. Re-import to change it."#,
+                    ),
+                    (
+                        label: "Grid leaf (A)",
+                        caption: r#"A new ShapeDef leaf with a stored grid: editable later, but a format bump and a new leaf in every match."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "image-import-polygon",
+                title: "An imported image becomes a polygon",
+                choice: Picked("Traced polygon (B)"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-14 (polygonize_alpha, scene.import_image)",
+        ),
+        (
+            question: (
+                id: "white-laser-full-traces",
+                title: "A white laser traces each colour from its origin",
+                source: "brief S-15",
+                description: r#"The brief forks a white ray into k coloured rays at its first refraction. The tracer instead runs the whole trace once per colour (7) plus the reference, and the overlay draws the corners they share in white. Before the split the casts repeat, at most bounces + 1 each."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Trace each colour in full",
+                        caption: r#"Simplest: trace_optics stays one walk, and the cost is at most 8 traces per white laser per step, inside the brief's k = 7 cap."#,
+                    ),
+                    (
+                        label: "Fork at the first refraction",
+                        caption: r#"Fewer casts before the split, but trace_optics needs a branching walk and a second buffer layout."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "white-laser-full-traces",
+                title: "A white laser traces each colour from its origin",
+                choice: Picked("Trace each colour in full"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-15, physics::laser (LaserBeam.spectrum, split)",
+        ),
+        (
+            question: (
+                id: "glass-dispersion-default",
+                title: "A new transparent body has crown glass dispersion",
+                source: "brief S-15",
+                description: r#"A body made transparent by the inspector or set-index starts with Cauchy B = 0.004 (crown glass). A file from before S-15 reads 0. Only a white laser sees the dispersion, so a coloured beam traces as before."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Crown glass, B = 0.004",
+                        caption: r#"A white laser through a new prism shows a spectrum with no extra step."#,
+                    ),
+                    (
+                        label: "No dispersion, B = 0",
+                        caption: r#"A prism shows white light until the person sets the dispersion."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "glass-dispersion-default",
+                title: "A new transparent body has crown glass dispersion",
+                choice: Picked("Crown glass, B = 0.004"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-15, domain::optics (Optics::default, of_index)",
+        ),
+        (
+            question: (
+                id: "erase-modifier-alt",
+                title: "Alt held at the press starts an erase stroke",
+                source: "brief S-16",
+                description: r#"The brief offers a held modifier or a toggle in the tool settings. The sketch tool reads Alt at the press: the whole stroke erases. The tool hint row says so."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Alt at the press",
+                        caption: r#"One gesture, no setting to forget; Alt was free in the sketch tool, and the stroke keeps its mode if Alt is let go mid-drag."#,
+                    ),
+                    (
+                        label: "A toggle in the tool settings",
+                        caption: r#"Visible, but a mode the person must turn off again; a second edit path for the same stroke."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "erase-modifier-alt",
+                title: "Alt held at the press starts an erase stroke",
+                choice: Picked("Alt at the press"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-16, interaction::tools::sketch_tool (SketchDraft.erase)",
+        ),
+        (
+            question: (
+                id: "erase-allows-notches",
+                title: "An erase may end inside a body",
+                source: "brief S-16",
+                description: r#"A cut is refused when the stroke ends inside the material (no notches). An erase is an eraser: a stroke that ends inside leaves a notch, one piece. Pieces still follow the cut's rules: fresh polygon-leaf bodies, joints and nodes rewired, a covered body removed."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Allow notches",
+                        caption: r#"An eraser that only works when it crosses the whole body would surprise the person."#,
+                    ),
+                    (
+                        label: "Through strokes only, as cut",
+                        caption: r#"Uniform with cut, but erasing an edge or a corner would do nothing."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "erase-allows-notches",
+                title: "An erase may end inside a body",
+                choice: Picked("Allow notches"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-16, command::cut_cmd (EraseCommand)",
+        ),
+        (
+            question: (
+                id: "thumbnail-from-records",
+                title: "A scene thumbnail is drawn from the records",
+                source: "brief S-17",
+                description: r#"The brief says to capture the viewport, 256 px wide. The save instead draws the bodies flat in their fill colours on the look's backdrop, 256 x 160, from the saved records (an SDF inside test per pixel)."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Draw from the records",
+                        caption: r#"Works in a headless or CLI save, the same bytes every time, testable without a window, and free of gizmos and panels."#,
+                    ),
+                    (
+                        label: "Capture the viewport",
+                        caption: r#"Shows the toon look and lighting, but needs a window and a settled frame, and a headless save writes no thumbnail."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "thumbnail-from-records",
+                title: "A scene thumbnail is drawn from the records",
+                choice: Picked("Draw from the records"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-17, command::thumbnail",
+        ),
+        (
+            question: (
+                id: "scene-browser-folder-not-saved",
+                title: "The Scenes folder is not saved in the scene",
+                source: "brief S-17",
+                description: r#"The brief calls the browser folder workstation config of the GridSettings class, which is saved with the scene. The folder is a resource the person sets (scene.browse_dir), never undone and not written into scene files. Unset, the panel shows the open scene's folder, else the working directory."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Not saved in the scene",
+                        caption: r#"An absolute path in a shared file shows the author's disk layout and does not resolve on another machine."#,
+                    ),
+                    (
+                        label: "Saved with the scene, as GridSettings",
+                        caption: r#"Follows the brief's class, but the path travels with every shared scene."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "scene-browser-folder-not-saved",
+                title: "The Scenes folder is not saved in the scene",
+                choice: Picked("Not saved in the scene"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-17, persist::browser::ScenesFolder",
+        ),
+        (
+            question: (
+                id: "scene-trash-folder",
+                title: "Trash moves a scene into a .trash folder",
+                source: "brief S-17",
+                description: r#"Delete in the Scenes panel, after a confirm, moves the scene and its thumbnail into a .trash folder beside them (scene.trash). It does not use the platform trash."#,
+                decision: true,
+                options: [
+                    (
+                        label: "A .trash folder beside the scene",
+                        caption: r#"No new dependency (a platform trash crate changes Cargo.lock), the same on every platform, and a mistake is one file move from undone."#,
+                    ),
+                    (
+                        label: "The platform trash",
+                        caption: r#"What a desktop user expects, but needs a new crate."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "scene-trash-folder",
+                title: "Trash moves a scene into a .trash folder",
+                choice: Picked("A .trash folder beside the scene"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-17, persist::browser::trash",
+        ),
+        (
+            question: (
+                id: "share-bundle-stored-zip",
+                title: "A shared scene is a stored ZIP written in-house",
+                source: "brief S-18",
+                description: r#"The brief asks for a ZIP with scene.ron at the root and says to check that the zip crate is in Cargo.lock. It is not. The persist layer writes and reads a stored (uncompressed) ZIP itself, with CRC-32, about 200 lines. The reader takes stored entries only and names the fix for a compressed one."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Stored ZIP, written in-house",
+                        caption: r#"No lockfile change, any unzip tool opens it, and the PNGs inside are compressed already, so compression gains little."#,
+                    ),
+                    (
+                        label: "Add the zip crate",
+                        caption: r#"Reads any ZIP, but a new crate and its dependencies are a reviewed lockfile change for a feature that needs one format."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "share-bundle-stored-zip",
+                title: "A shared scene is a stored ZIP written in-house",
+                choice: Picked("Stored ZIP, written in-house"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-18, persist::bundle",
+        ),
+        (
+            question: (
+                id: "shared-bundle-opens-to-temp",
+                title: "An opened bundle extracts its images to a temp folder",
+                source: "brief S-18",
+                description: r#"Opening a shared .zip writes its images under the temp directory (gradiance-bundles/<name>-<crc>) and makes that the scene folder, so texture paths resolve. The last-save path is cleared, so Ctrl+S asks where to save."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Extract to a temp folder",
+                        caption: r#"Opening never writes beside the person's file, and a save goes where they choose."#,
+                    ),
+                    (
+                        label: "Extract beside the bundle",
+                        caption: r#"The images stay with the file, but opening writes into the person's folder without asking."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "shared-bundle-opens-to-temp",
+                title: "An opened bundle extracts its images to a temp folder",
+                choice: Picked("Extract to a temp folder"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-18, persist::open_bundle",
+        ),
+        (
+            question: (
+                id: "string-table-ratchet",
+                title: "The string table lands as a ratchet",
+                source: "brief S-19",
+                description: r#"The brief wants every menu, panel and operation-title label from one string table, with a scanner rejecting new literals. The UI has about 260 label literals in 23 files. The menu bar and the Scenes panel now read every label from assets/lang/en.ron. A scanner test counts the label literals left in each other file against a baseline that can only go down. Operation titles (OpMeta) stay in code for now."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Menus now, a ratchet for the rest",
+                        caption: r#"One reviewable PR; no new literal can land, and each later panel edit moves its labels and lowers the count."#,
+                    ),
+                    (
+                        label: "Every panel in one PR",
+                        caption: r#"Done at once, but a 260-string mechanical diff over 23 files is hard to review and collides with every open panel branch."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "string-table-ratchet",
+                title: "The string table lands as a ratchet",
+                choice: Picked("Menus now, a ratchet for the rest"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-19, ui::text (BASELINE)",
+        ),
+        (
+            question: (
+                id: "language-not-in-scene",
+                title: "The language is not saved in a scene",
+                source: "brief S-19",
+                description: r#"The brief calls the language workstation config. Like the unit settings, it is a resource Settings > Interface writes directly: never undone and not written into scene files. It resets to English at launch; only English ships, so nothing is lost yet."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Not saved in the scene",
+                        caption: r#"Opening a scene from someone else must not switch your menus to their language."#,
+                    ),
+                    (
+                        label: "Saved with the scene, as GridSettings",
+                        caption: r#"Kept across launches, but a shared scene would carry its author's language."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "language-not-in-scene",
+                title: "The language is not saved in a scene",
+                choice: Picked("Not saved in the scene"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-19, ui::text::Language",
+        ),
+        (
+            question: (
+                id: "pad-dead-zone-in-bus-name",
+                title: "Where a pad input's dead zone lives",
+                source: "S-20",
+                description: r#"A pad block has a dead zone. It can live in the bus input name or in a per-frame table."#,
+                decision: true,
+                options: [
+                    (
+                        label: "In the bus name",
+                        caption: r#"The kernel reads pad@LeftStickX/0.1. Two blocks on one stick with two dead zones read two inputs. No new kernel state."#,
+                    ),
+                    (
+                        label: "A per-block table",
+                        caption: r#"The publisher looks up each block's dead zone. More state, same result."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "pad-dead-zone-in-bus-name",
+                title: "Where a pad input's dead zone lives",
+                choice: Picked("In the bus name"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "crates/gradiance-domain/src/pad.rs",
+        ),
+        (
+            question: (
+                id: "pad-first-gamepad",
+                title: "Which gamepad a pad input reads",
+                source: "S-20",
+                description: r#"Bevy can see more than one gamepad. A pad block names a stick, not a pad."#,
+                decision: true,
+                options: [
+                    (
+                        label: "The first connected gamepad",
+                        caption: r#"One person plays a scene at a time. A pad index can come later with no format change (serde default)."#,
+                    ),
+                    (
+                        label: "A pad index field now",
+                        caption: r#"Adds a field and UI that no current scene needs."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "pad-first-gamepad",
+                title: "Which gamepad a pad input reads",
+                choice: Picked("The first connected gamepad"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "crates/gradiance-interaction/src/graph_pads.rs",
+        ),
+        (
+            question: (
+                id: "pad-default-dead-zone",
+                title: "The default dead zone of a pad input",
+                source: "S-20",
+                description: r#"A worn stick rests a little off centre. The default sets what a new block reads at rest."#,
+                decision: true,
+                options: [
+                    (
+                        label: "0.1, rescaled",
+                        caption: r#"A worn stick reads 0 at rest, and full travel still reads 1."#,
+                    ),
+                    (
+                        label: "0, raw",
+                        caption: r#"A stick at rest drifts a motor or a thruster."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "pad-default-dead-zone",
+                title: "The default dead zone of a pad input",
+                choice: Picked("0.1, rescaled"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "crates/gradiance-domain/src/pad.rs",
+        ),
+        (
+            question: (
+                id: "scroll-unit-splits-wheel-and-trackpad",
+                title: "How the camera tells a wheel from a trackpad",
+                source: "S-21",
+                description: r#"A two-finger trackpad drag arrives as scroll. A wheel notch also arrives as scroll, and it zooms."#,
+                decision: true,
+                options: [
+                    (
+                        label: "By the scroll unit",
+                        caption: r#"Pixel-unit scroll pans and Ctrl+pixel scroll zooms. Line-unit scroll zooms as before. macOS and Wayland trackpads pan; Windows and X11 touchpads still zoom, because they scroll in lines."#,
+                    ),
+                    (
+                        label: "A setting to choose",
+                        caption: r#"Adds a saved camera field and a settings row for a guess most people never change."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "scroll-unit-splits-wheel-and-trackpad",
+                title: "How the camera tells a wheel from a trackpad",
+                choice: Picked("By the scroll unit"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "crates/gradiance-interaction/src/camera_gestures.rs",
+        ),
+        (
+            question: (
+                id: "two-finger-turn-rolls",
+                title: "What a two-finger turn does to the camera",
+                source: "S-21",
+                description: r#"The brief says a two-finger rotate orbits. A turn on a flat screen has one axis: the view axis."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Roll the view",
+                        caption: r#"The scene turns with the fingers, about the view axis. Home glides the roll back to 0. Middle-drag keeps the yaw and pitch orbit."#,
+                    ),
+                    (
+                        label: "Yaw orbit",
+                        caption: r#"A turn of the fingers would swing the scene out of the plane, which does not follow the fingers."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "two-finger-turn-rolls",
+                title: "What a two-finger turn does to the camera",
+                choice: Picked("Roll the view"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "crates/gradiance-interaction/src/camera_gestures.rs",
+        ),
+        (
+            question: (
+                id: "gesture-zoom-not-scaled",
+                title: "Whether CameraSettings scales gesture zoom",
+                source: "S-21",
+                description: r#"A pinch and a spread are analog: the scene follows the fingers."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Not scaled",
+                        caption: r#"A spread of 2x zooms 2x, so the point under the fingers stays under them. Only Ctrl+trackpad scroll uses zoom_step, like a wheel."#,
+                    ),
+                    (
+                        label: "Scaled by zoom_step",
+                        caption: r#"The scene would slide under the fingers."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "gesture-zoom-not-scaled",
+                title: "Whether CameraSettings scales gesture zoom",
+                choice: Picked("Not scaled"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "crates/gradiance-interaction/src/camera_gestures.rs",
+        ),
+        (
+            question: (
+                id: "air-buoyancy-area-from-outline",
+                title: "Which area air buoyancy uses",
+                source: "S-22",
+                description: r#"The brief names the outline the drag pass reads. That is the convex hull, which counts a notch or a hole as solid."#,
+                decision: true,
+                options: [
+                    (
+                        label: "The exact outline",
+                        caption: r#"The water buoyancy's SubmergeOutline: holes and concave parts count, so air and water agree on a body's volume."#,
+                    ),
+                    (
+                        label: "The drag hull",
+                        caption: r#"A C-shaped body would displace air it does not hold."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "air-buoyancy-area-from-outline",
+                title: "Which area air buoyancy uses",
+                choice: Picked("The exact outline"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "crates/gradiance-physics/src/air.rs",
+        ),
+        (
+            question: (
+                id: "air-buoyancy-world-gravity",
+                title: "Which gravity air buoyancy uses",
+                source: "S-22",
+                description: r#"A body has a gravity scale. The air does not."#,
+                decision: true,
+                options: [
+                    (
+                        label: "World gravity",
+                        caption: r#"As in water: a gravity scale changes a body's weight, not the weight of the air it displaces."#,
+                    ),
+                    (
+                        label: "The body's scaled gravity",
+                        caption: r#"A body with gravity scale 0 would feel no lift, unlike in water."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "air-buoyancy-world-gravity",
+                title: "Which gravity air buoyancy uses",
+                choice: Picked("World gravity"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "crates/gradiance-physics/src/air.rs",
+        ),
     ],
 )

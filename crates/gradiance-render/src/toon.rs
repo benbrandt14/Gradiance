@@ -71,6 +71,18 @@ pub struct ToonExtension {
     #[texture(103)]
     #[sampler(104)]
     pub field: Option<Handle<Image>>,
+    /// The body's image (brief S-13): `xyz` = the first row of the affine
+    /// map from face coordinates to image coordinates, `w` = 1 when
+    /// [`image`](Self::image) is set.
+    #[uniform(105)]
+    pub image_u: Vec4,
+    /// The second row of that map; `w` = 1 for a raw (unlit) image.
+    #[uniform(106)]
+    pub image_v: Vec4,
+    /// The body's image, when it has one (`texture_sync`).
+    #[texture(107)]
+    #[sampler(108)]
+    pub image: Option<Handle<Image>>,
 }
 
 impl MaterialExtension for ToonExtension {

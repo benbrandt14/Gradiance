@@ -21,8 +21,11 @@ pub mod hold;
 pub mod island_sync;
 pub mod joint_sync;
 pub mod laser;
+pub mod lifetime;
 pub mod motor;
+pub mod particles;
 pub mod queries;
+pub mod surface;
 pub mod thrust;
 
 use avian2d::prelude::*;
@@ -56,6 +59,8 @@ impl Plugin for GradiancePhysicsPlugin {
         // bodies (`retune_joints`), matching Box2D's motor-keeps-awake rule.
         app.add_plugins(
             PhysicsPlugins::default()
+                // Conveyor surfaces (brief S-8): the one hook set of the app.
+                .with_collision_hooks::<surface::GradianceHooks>()
                 // The world is SI: 1 world unit = 1 metre, so avian's
                 // length-based tolerances need no scaling (pixels live only at
                 // the render/pick seam).
@@ -109,6 +114,10 @@ impl Plugin for GradiancePhysicsPlugin {
         // this frame resets at the top of each frame.
         app.init_resource::<SimStep>();
         app.add_systems(First, clear_stepped_flag);
+        app.add_systems(PostStartup, seed_last_physics_tick);
+        lifetime::install(app);
+        surface::install(app);
+        particles::install(app);
         app.add_systems(FixedFirst, advance_owed_step);
         app.add_systems(
             Update,
@@ -150,6 +159,8 @@ impl Plugin for GradiancePhysicsPlugin {
                 (
                     thrust::apply_thrusters,
                     air::apply_air_drag,
+                    air::apply_air_buoyancy,
+                    air::wake_on_air_buoyancy,
                     buoyancy::apply_buoyancy,
                 )
                     .run_if(sim_running),
@@ -316,6 +327,25 @@ impl SimStep {
 /// behaves as the same span played.
 pub fn sim_running(state: Res<State<GameState>>, step: Res<SimStep>) -> bool {
     *state.get() == GameState::Playing || step.active()
+}
+
+/// Gives avian's `LastPhysicsTick` a real tick before physics first runs.
+///
+/// avian keeps it at 0 until its schedule has run once and then, on that
+/// first run, compares every change against tick 1 instead of the real tick.
+/// A `Transform` edited before the first step (a `place` or a drag in a
+/// scene that opened paused) then reads as unchanged: the step kept the old
+/// `Position`/`Rotation` and wrote it back over the edit (Phase S defect,
+/// `docs/upstream-watch.md`). Seeding the tick here makes the first step
+/// compare like every later one; bodies spawned before it still count as
+/// added.
+fn seed_last_physics_tick(
+    mut last: ResMut<avian2d::schedule::LastPhysicsTick>,
+    tick: bevy::ecs::system::SystemChangeTick,
+) {
+    if last.0.get() == 0 {
+        last.0 = tick.this_run();
+    }
 }
 
 fn clear_stepped_flag(mut step: ResMut<SimStep>) {

@@ -31,7 +31,7 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Drag (force in play) | present | `tool.drag` (mouse spring, `physics::grab`) |
 | Knife / cut | present | `tool.cut`, `cut` |
 | Sketch (freehand body) | partial | `tool.sketch` (N-6). No gesture grammar: rejected (owner, 2026-11-21: no shape recognition) |
-| Brush (paint/erase area) | partial | sketch tool paints; erase mode: **S-16** |
+| Brush (paint/erase area) | present | sketch tool paints; Alt+drag erases, `body.erase` (S-16) |
 | Hinge / axle | present | `tool.hinge`, `hinge` (body-body and world pin) |
 | Fixate | present | `tool.weld` |
 | Spring | present | `tool.spring`, `spring`; spring from empty space pins to the world (J-1) |
@@ -39,8 +39,8 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Thruster | present | `tool.thruster`, `thruster` (N-3) |
 | Tracer | present | `tool.tracer` (fade, size, pattern: `domain::tracer`) |
 | Laser pen | done | `tool.laser`, `laser` (N-8): reflection and hit signal; refraction and beam colour: **S-3** |
-| Gear | missing | **S-5** (gear outline as geometry, meshing by contact) |
-| Texture | missing | **S-13** |
+| Gear | done | **S-5**: `tool.gear`, `spawn-gear` (rack-generated teeth, meshing by contact) |
+| Texture | present | `BodyTexture`, `set-texture`, texture tool (S-13) |
 | Erase | present | Delete key, `delete` |
 | Rectangle / rotate / zoom / pan (lesson era) | present | box tool, handles, camera rig |
 
@@ -52,7 +52,7 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Undo / redo, undo a run | present | `undo`, `redo`; a run is one undo step |
 | Gravity on/off, strength, direction | present | Settings > Simulation dial, `sim-set "gravity…"` |
 | Air friction, wind | present | `SimSettings` drag/wind (N-4) |
-| Air buoyancy | missing | **S-22** |
+| Air buoyancy | done | `SimSettings.air_buoyancy`, Settings > Simulation > Air; exact outline area, world gravity (S-22) |
 | Sim speed, frequency, iterations | present | `SimSettings.speed`, `timestep_hz`, `substeps` |
 | Grid, snap | present | `GridSettings`, `SnapConfig` (Phase 1) |
 | Collision layers (check/uncheck all) | present | `DepthBand` ≡ layer, Depth panel, context menu Depth |
@@ -61,13 +61,13 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Velocity menu: show velocity / momentum / force arrows | done | **S-2b** (per body: Appearance arrows, `set-arrows`; `debug.velocities` stays the global overlay) |
 | Direction picker for velocity | done | **S-1** (#306: inspector Starting motion dial) |
 | File load / save / new | present | `load-scene`, `save-scene`, `new-scene`, File menu |
-| File browser with thumbnails | missing | **S-17** |
-| Online scene sharing | missing | **S-18** (one-file share, no server) |
+| File browser with thumbnails | present | Scenes panel, `scene.browse_dir`, `scene.rename`, `scene.trash` (S-17) |
+| Online scene sharing | partial | File > Share writes one `.zip` (scene, thumbnail, images), `scene.load` opens it (S-18); no server |
 | Tutorials, lessons | declined | owner, 2026-11-19 ("not an educational tool") |
-| Language choice | missing | **S-19** (string table) |
+| Language choice | partial | string table `assets/lang/en.ron`, Settings > Interface > Language; menu bar on the table, other panels ratchet (S-19) |
 | UI scale | *unverified* | egui zoom not checked |
-| Joystick | missing | **S-20** |
-| Multi-touch, trackpad gestures | missing | **S-21** |
+| Joystick | done | `(defpad name input)`, the node graph's Pad block; first gamepad, dead zone (S-20) |
+| Multi-touch, trackpad gestures | done | two fingers pan, zoom, roll; trackpad pixel scroll pans, pinch zooms; camera only (S-21) |
 
 ## Object context menu
 
@@ -76,23 +76,23 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Clone | present | Copy/Paste (`copy-ron`, `paste-ron`), Array (`array-copies`) |
 | Mirror | present | `mirror-h`, `mirror-v` (N-9) |
 | Glue to background | present | `set-static`, hinge world pin |
-| Loosen (drop the body's joints) | missing | **S-6** |
-| Add centre axle / centre thruster | partial | tools place them by click, no one-click centre action: **S-6** |
+| Loosen (drop the body's joints) | done | **S-6**: `loosen`, context menu |
+| Add centre axle / centre thruster | done | **S-6**: `pin-centre`, `thruster-centre`, context menu |
 | Attach tracer | present | tracer tool on a body |
-| Transform into circle | missing | **S-6** |
-| Transform into gear | missing | **S-5** |
+| Transform into circle | done | **S-6**: `to-circle` (equal area), context menu |
+| Transform into gear | done | **S-5**: context menu "Make gear", `make-gear` |
 | CSG | present | `merge`, `subtract`, `intersect`, `xor`, `fillet-merge` |
 | Select objects under cursor | present | context "Select from" stack |
-| Liquify | missing | **S-11** (after S-10) |
-| Make sponge (soft body) | missing | **S-12** (spring lattice) |
+| Liquify | present | `body.liquify`, context "Liquify" (S-11) |
+| Make sponge (soft body) | present | `body.sponge`, context "Make sponge" (S-12, spring lattice) |
 | Appearance: colour, opacity, border | present | `Appearance { fill (RGBA), border, emissive }`, `set-color` |
 | Text on object | declined | owner rejected notes/annotations (2026-11-19); `label` names a body in the viewport |
-| Geometry from image | missing | **S-14** |
+| Geometry from image | present | `scene.import_image`, File "Import image as body" (S-14, traced polygon) |
 | Material: density, friction, restitution | present | inspector, `set-density`, `set-friction`, `set-restitution` |
 | Material: mass entry | partial | density only; mass is derived (the field was in the rejected presets brief) |
 | Material: refractive index | done | **S-3** (`Optics`, `set-index`, inspector) |
 | Material: attraction | present | `FieldSource` (`domain::field`, M20) |
-| Material: surface velocity (conveyor) | missing | **S-8** |
+| Material: surface velocity (conveyor) | done | **S-8**: `set-surface-speed`, inspector "surface speed" (avian contact tangent speed) |
 | Material presets (wood, glass, …) | rejected | owner, 2026-11-21 |
 | Velocity: set linear and angular velocity | done | **S-1** (#306: `InitialMotion`, `set-velocity`, `set-spin`) |
 | Information: mass, position, speed, spin, momentum, angular momentum, kinetic energy | present | quantity catalog (`quantity`), signal sources, Probe panel |
@@ -109,7 +109,7 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Feature | Status | Where in Gradiance |
 |---|---|---|
 | Hinge motor: speed, torque, reverse | present | `MotorConfig` (`domain::joint`), joint inspector |
-| Hinge brake | partial | motor at 0 speed with a torque cap holds; no one-click brake: **S-6** |
+| Hinge brake | done | **S-6**: `brake`, joint context menu "Brake motor" |
 | Hinge limits | present | joint inspector limits |
 | Break limit (rope, joint) | present | `JointCommon.break_force`, `JointLoad` tint (N-9) |
 | Spring strength, damping, length | present | spring frequency, damping ratio, rest length |
@@ -121,10 +121,10 @@ jitter, water surface, laser canvas block, `signal.bind`).
 
 | Feature | Status | Where in Gradiance |
 |---|---|---|
-| Particle water, add water | missing | `Fluid` region (N-7) floats bodies; particles: **S-10** spike, **S-11** tools |
+| Particle water, add water | present | particles (S-10, `docs/particle-fluid-decision.md`); water tool, `water.fill`, `water.drain` (S-11); `Fluid` region (N-7) stays |
 | Refraction, total internal reflection | missing | **S-3** |
 | Mirror (index ∞) | present | every solid body reflects (N-8) |
-| Dispersion, white light | missing | **S-15** (after S-3) |
+| Dispersion, white light | present | `Optics.dispersion` (Cauchy B), `set-dispersion`, laser "white light" (S-15) |
 
 ## Scripting
 
@@ -135,14 +135,14 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Read/write position, angle | present | `body-x`, `body-y`, `body-rot`, `place` |
 | Read/write velocity | done | read via `quantity`; the starting value written by `set-velocity`/`set-spin` (**S-1**) |
 | Per-frame update / post-step | present | computed signals (`defsignal`, Tier-B kernel): the VM never runs per frame by rule |
-| On collide | partial | `ContactCount`, `ContactForce` sources; no edge event, no action on hit: **S-7** |
+| On collide | done | **S-7**: the `hit` pulse (signal source `HitPulse`, quantity `hit`), remove on contact; no script callback (the VM never runs per frame) |
 | On key | present | `defkey` |
 | On laser hit | present | laser bus signal `<name>` (N-8) |
 | On spawn | declined | spawn is a command; a script runs it already |
-| Time to live | missing | **S-7** |
+| Time to live | done | **S-7**: `set-lifetime`, inspector "remove after" |
 | Entity by id | present | verbs take an index or a `StableId` |
 | Sim time, running | present | `sim-time` |
-| Camera zoom / pan from script | missing | **S-9** |
+| Camera zoom / pan from script | done | **S-9**: `camera-look x y zoom` |
 | Mouse position | partial | `action-x`, `action-y`, tool points |
 | File write | present | `save-scene`, `signal-export` |
 | Random numbers | *unverified* | Steel built-ins not checked |
@@ -152,8 +152,8 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Feature | Status | Where in Gradiance |
 |---|---|---|
 | Zoom, pan | present | camera rig, `camera-set` (feel only) |
-| Follow a body | missing | **S-9** |
-| Zoom to fit / to selection | missing | **S-9** |
+| Follow a body | done | **S-9**: `camera-follow`, View > Follow selection |
+| Zoom to fit / to selection | done | **S-9**: `camera-frame`, View > Frame selection (`.`) and Frame all |
 
 ## Rejected or declined
 

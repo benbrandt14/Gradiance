@@ -1,0 +1,81 @@
+// The English string table (brief S-19): every user-facing label the menus
+// draw, by id. A second language is a file like this one beside it
+// (`assets/lang/<code>.ron`) with the same ids; an id it lacks shows the
+// English text. `ui::text` reads it; Settings > Interface picks the file.
+{
+    "menu-file": "File",
+    "menu-edit": "Edit",
+    "menu-view": "View",
+    "menu-help": "Help",
+    "menu-debug": "Debug",
+
+    "file-new": "New scene",
+    "file-open": "Open…",
+    "file-insert": "Insert…",
+    "file-import_image": "Import image as body…",
+    "file-save": "Save",
+    "file-share": "Share…",
+    "file-snapshot": "Save snapshot",
+    "file-quit": "Quit",
+
+    "edit-undo": "Undo",
+    "edit-redo": "Redo",
+    "edit-copy": "Copy",
+    "edit-paste": "Paste",
+    "edit-delete": "Delete selection",
+    "edit-group": "Group",
+    "edit-ungroup": "Ungroup",
+    "edit-mirror_h": "Mirror horizontally",
+    "edit-mirror_v": "Mirror vertically",
+
+    "view-frame_selection": "Frame selection",
+    "view-frame_all": "Frame all",
+    "view-follow": "Follow selection",
+    "view-unfollow": "Stop following",
+    "view-grid": "Grid",
+    "view-fields": "Field overlay",
+
+    "panel-outliner": "Outliner",
+    "panel-groups": "Groups",
+    "panel-properties": "Properties",
+    "panel-depth": "Depth",
+    "panel-plot": "Plot",
+    "panel-nodes": "Node Graph",
+    "panel-console": "Script console",
+    "panel-probe": "Probe",
+    "panel-scenes": "Scenes",
+    "panel-array": "Array",
+    "panel-optimizer": "Optimizer",
+    "panel-settings": "Settings",
+    "panel-review": "Review",
+    "panel-search": "Search operations",
+    "panel-status": "Status bar",
+    "panel-unknown": "Panel",
+
+    "scenes-folder": "Folder",
+    "scenes-folder-hint": "show the scene files in another folder",
+    "scenes-empty": "No scene files here. Save one to see it.",
+    "scenes-no_thumbnail": "no thumbnail",
+    "scenes-tile-hint": "click: open; F2: rename; Delete: move to the trash",
+    "scenes-trash-title": "Move to trash",
+    "scenes-trash-ask": "Move \"{}\" and its thumbnail to the .trash folder?",
+    "scenes-trash-yes": "Move to trash",
+    "scenes-trash-no": "Cancel",
+
+    "help-about": "About Gradiance",
+    "about-title": "About Gradiance",
+    "about-name": "Gradiance",
+    "about-tagline": "An Algodoo-inspired 2.5D physics sandbox.",
+    "about-format": "Scene format v{}",
+
+    "graph-pad": "Pad",
+    "graph-pad-hint": "a gamepad stick (-1..1) or button (0..1) in play",
+    "graph-pad-input-hint": "the stick or button this input reads",
+    "graph-pad-dead-zone": "dead zone",
+
+    "settings-air-buoyancy": "air buoyancy",
+    "settings-air-buoyancy-hint": "every body feels the weight of the air it displaces, against gravity; a body less dense than the air rises",
+
+    "settings-language": "Language",
+    "settings-language-hint": "the language of the menus; a language is a file in assets/lang",
+}

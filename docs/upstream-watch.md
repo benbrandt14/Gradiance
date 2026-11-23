@@ -32,3 +32,22 @@ which its `LICENSE-BRAND` reserves. Port nothing from those folders.
   Repro: `tests/it/chains.rs` `a_settled_chain_has_no_buzzing_link`
   (`#[ignore]`). Recheck on each avian upgrade; a reader of link speed
   (plots, readouts) sees the phantom value.
+- **avian2d 0.8 — the first physics run compares changes against tick 1**
+  (Phase S defect, 2026-11-22). `LastPhysicsTick` stays 0 until the
+  physics schedule first runs, and `transform_to_position` then uses
+  `Tick::new(1)` as "this run". A `Transform` edited before the first step
+  (a `place` in a scene that opened paused) reads as unchanged, so the
+  step kept the old `Position`/`Rotation` and wrote it back over the edit.
+  Gradiance seeds the tick at `PostStartup`
+  (`physics::seed_last_physics_tick`); pinned by `tests/it/physics_sync.rs`
+  `a_paused_place_survives_a_step`. Recheck on each avian upgrade; drop the
+  seed when avian starts from a real tick.
+- **avian2d 0.8 — a contact-modify flag added later is never seen**
+  (S-8, 2026-11-22). The `Insert<ActiveCollisionHooks>` observer in
+  `collider_tree/update.rs` (case 10) updates the proxy's `CUSTOM_FILTER`
+  flag but not `MODIFY_CONTACTS`, which is read only when the proxy is
+  made. A body that gains the flag after its collider exists never calls
+  `modify_contacts`. Gradiance makes the flag a required component of
+  every `Body` (`physics::surface::install`); a body with no surface speed
+  adds 0. Recheck on each avian upgrade; when fixed, put the flag only on
+  bodies with a `SurfaceSpeed`.

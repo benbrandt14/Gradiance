@@ -59,6 +59,9 @@ pub fn box_record(pos: Vec2, width: f32, height: f32) -> BodyRecord {
         fluid: None,
         motion: None,
         optics: None,
+        lifetime: None,
+        surface: None,
+        texture: None,
     }
 }
 

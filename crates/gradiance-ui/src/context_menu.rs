@@ -15,7 +15,7 @@ use gradiance_core::units::PosRot;
 use gradiance_domain::Body;
 use gradiance_domain::appearance::Appearance;
 use gradiance_domain::depth::DepthBand;
-use gradiance_domain::joint::JointDef;
+use gradiance_domain::joint::{JointDef, JointKind};
 use gradiance_domain::node::{BehaviorNode, NodeKind};
 use gradiance_domain::shape::ShapeDef;
 use gradiance_interaction::PointerOverUi;
@@ -145,6 +145,8 @@ pub struct PanelMenu<'w> {
     depth: ResMut<'w, crate::depth_panel::DepthPanel>,
     optimizer: crate::optimizer::OptimizerPanel<'w>,
     array: ResMut<'w, crate::array_panel::ArrayWindow>,
+    /// The string table (brief S-19): the mirror rows' labels.
+    strings: Res<'w, crate::text::Strings>,
 }
 
 /// The menu's writers, bundled into one `SystemParam` to keep
@@ -195,6 +197,51 @@ pub struct ContextMenu {
     /// The radius "Merge with fillet" uses; kept between openings.
     pub fillet_radius: FilletRadius,
 }
+
+/// One-click actions on the selected bodies (briefs S-5, S-6), as
+/// `(label, operation id, hover text)`. Each operation takes `{"i":
+/// "selection"}` and is one undo step. Kept as data so a later surface (the
+/// contextual task bar) renders the same table.
+pub const BODY_QUICK_ACTIONS: &[(&str, &str, &str)] = &[
+    (
+        "Loosen",
+        "body.loosen",
+        "drop every joint of the selected bodies; the bodies stay",
+    ),
+    (
+        "Pin at centre",
+        "body.pin_centre",
+        "hinge the body to the world at its centre, so it can only spin",
+    ),
+    (
+        "Thruster at centre",
+        "body.thruster_centre",
+        "attach a thruster at the body's centre, pushing along its up",
+    ),
+    (
+        "To circle",
+        "body.to_circle",
+        "turn each selected body into a circle of the same area",
+    ),
+    (
+        "Make gear",
+        "body.make_gear",
+        "turn each selected circle into a toothed gear that meshes with other made gears",
+    ),
+    (
+        "Liquify",
+        "body.liquify",
+        "turn the selected bodies into particle water of the same area",
+    ),
+];
+
+/// One-click actions on a hinge under the click (brief S-6), as
+/// `(label, operation id, hover text)`; each takes the joint's id as `i`.
+pub const HINGE_QUICK_ACTIONS: &[(&str, &str, &str)] = &[(
+    "Brake motor",
+    "joint.brake",
+    "motor on at 0 rad/s with its torque cap kept: the hinge holds still",
+)];
 
 /// The context menu's fillet radius, in metres — a parameter of the next
 /// "Merge with fillet" gesture, not authored state: it lives with the
@@ -508,6 +555,16 @@ pub fn context_menu(
                         writers.node_graph.add(joint_id);
                         close = true;
                     }
+                    if matches!(def.kind, JointKind::Hinge { .. }) {
+                        for &(label, id, hint) in HINGE_QUICK_ACTIONS {
+                            if row(ui, label, hint) {
+                                writers
+                                    .invoke
+                                    .write(InvokeOp::with(id, json!({"i": joint_id.0.to_string()})));
+                                close = true;
+                            }
+                        }
+                    }
                     if row(ui, "Delete joint", "") {
                         writers.invoke.write(InvokeOp::with(
                             "joint.delete",
@@ -595,6 +652,34 @@ pub fn context_menu(
                         .write_batch(key_invocations(EditorAction::Ungroup));
                     close = true;
                 }
+                // Quick actions (briefs S-5, S-6): one table of operation
+                // ids, invoked on the selection.
+                for &(label, id, hint) in BODY_QUICK_ACTIONS {
+                    if row_enabled(ui, label, hint, !selected_ids.is_empty()) {
+                        writers
+                            .invoke
+                            .write(InvokeOp::with(id, json!({"i": "selection"})));
+                        close = true;
+                    }
+                }
+                // Make sponge (brief S-12): the operation's auto spacing and
+                // default stiffness; Adjust Last Operation tunes both.
+                if row_enabled(
+                    ui,
+                    "Make sponge",
+                    "replace the body by circles joined by springs, inside its outline",
+                    !selected_ids.is_empty(),
+                ) {
+                    writers.invoke.write(InvokeOp::with(
+                        "body.sponge",
+                        json!({
+                            "i": "selection",
+                            "spacing": 0.0,
+                            "stiffness": gradiance_command::ops::sponge::SPONGE_STIFFNESS,
+                        }),
+                    ));
+                    close = true;
+                }
                 if row_enabled(ui, "Merge into one body", "", selected_ids.len() >= 2) {
                     writers.invoke.write(InvokeOp::with(
                         "body.merge",
@@ -656,6 +741,7 @@ pub fn context_menu(
                 }
                 // Mirror, from the Edit menu's table (brief Q-3; no key).
                 for (label, id) in crate::menu::MIRROR_ROWS {
+                    let label = panels.strings.t(label);
                     if row_enabled(ui, label, "", !selected_ids.is_empty()) {
                         writers
                             .invoke
@@ -908,29 +994,34 @@ fn depth_edit(
     }
 }
 
-/// A body's conservative world-space AABB.
+/// A body's conservative world-space AABB (`geometry::sdf::world_aabb`).
 fn world_bounds(shape: &ShapeDef, transform: &Transform) -> (Vec2, Vec2) {
-    let (min, max) = gradiance_geometry::sdf::aabb(shape);
-    let affine = transform.compute_affine();
-    let corners = [
-        Vec2::new(min.x, min.y),
-        Vec2::new(max.x, min.y),
-        Vec2::new(max.x, max.y),
-        Vec2::new(min.x, max.y),
-    ];
-    let mut wmin = Vec2::splat(f32::MAX);
-    let mut wmax = Vec2::splat(f32::MIN);
-    for corner in corners {
-        let w = affine.transform_point3(corner.extend(0.0)).truncate();
-        wmin = wmin.min(w);
-        wmax = wmax.max(w);
-    }
-    (wmin, wmax)
+    let rot = transform.rotation.to_euler(EulerRot::XYZ).2;
+    gradiance_geometry::sdf::world_aabb(shape, transform.translation.truncate(), rot)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every quick action names a registered operation that a click can
+    /// supply (its fields are targets, or optional).
+    #[test]
+    fn quick_actions_name_clickable_operations() {
+        let mut app = App::new();
+        app.add_plugins(gradiance_op::OpPlugin);
+        gradiance_command::ops::install(&mut app);
+        let registry = app.world().resource::<gradiance_op::OpRegistry>();
+        for (label, id, _) in BODY_QUICK_ACTIONS.iter().chain(HINGE_QUICK_ACTIONS) {
+            let entry = registry
+                .get(id)
+                .unwrap_or_else(|| panic!("{label}: {id} is not registered"));
+            assert!(
+                entry.selection_params().is_some(),
+                "{label}: {id} needs typing"
+            );
+        }
+    }
 
     #[test]
     fn nearest_joint_picks_closest_within_radius() {
