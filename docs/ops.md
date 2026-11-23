@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 180 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 181 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -23,6 +23,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `body.cut` | `(cut ax ay bx by width)` | edit | `cut` | — | Cut every body the stroke a→b passes through, at the given width (metres). | `{"ax": -2, "ay": 1, "bx": 2, "by": 1, "width": 0.05}` |
 | `body.delete` | `(delete i)` | edit | `delete` | Edit/Delete selection, Delete | Delete the i-th body (id order, same index as body-x) — undoable. | `{"i": 0}` |
 | `body.density` | `(body-density i)` | query | — | — | Mass density of the i-th body. | `{"i": 0}` |
+| `body.erase` | `(erase path width)` | edit | `erase` | — | Erase a brush stroke width wide along path [x0 y0 x1 y1 …] from every body it touches, like the sketch tool with Alt held: a body the stroke divides becomes pieces, one it covers goes. Unlike cut, a stroke may end inside a body and leave a notch. | `{"path": [6.4, 0.6, 7.6, 1.4], "width": 0.1}` |
 | `body.fillet_merge` | `(fillet-merge a b radius)` | edit | `fillet-merge` | Context/Merge with fillet | Fuse bodies a and b into one with a smooth fillet of radius metres where they meet (CSG smooth union); a survives. Bridges a gap under radius/2. Errors unless radius > 0. | `{"a": 0, "b": 1, "radius": 0.25}` |
 | `body.friction` | `(body-friction i)` | query | — | — | Coulomb friction of the i-th body. | `{"i": 0}` |
 | `body.index_at` | `(body-index-at x y)` | query | — | — | Index of a body whose shape contains (x, y) (first in id order); -1 if none. | `{"x": 0, "y": 1}` |
@@ -266,7 +267,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `tool.register` | `(register-tool name points src)` | editor | — | — | Add a palette tool that collects `points` clicks, then runs src once (read them with tool-x/tool-y). | `{"name": "peg", "points": 1, "src": "(spawn-circle (tool-x 0) (tool-y 0) 0.2)"}` |
 | `tool.rod` | `(rod-tool)` | editor | — | Tools/Rod, L | Use the rod tool: drag from one end to the other. | `{}` |
 | `tool.select` | `(select-tool)` | editor | — | Tools/Select, S | Use the select tool: click to select, drag to move, right-drag to rotate. | `{}` |
-| `tool.sketch` | `(sketch-tool)` | editor | — | Tools/Sketch | Use the sketch tool: draw freehand; release makes one body of the stroke. | `{}` |
+| `tool.sketch` | `(sketch-tool)` | editor | — | Tools/Sketch | Use the sketch tool: draw freehand; release makes one body of the stroke. Hold Alt as you press to erase the stroke from the bodies it touches. | `{}` |
 | `tool.spring` | `(spring-tool)` | editor | — | Tools/Spring, T | Use the spring tool: drag from one anchor to the other. | `{}` |
 | `tool.texture` | `(texture-tool)` | editor | — | Tools/Texture | Use the texture tool: drag a body's image to move it, Shift-drag to scale it, right-drag to turn it. | `{}` |
 | `tool.thruster` | `(thruster-tool)` | editor | — | Tools/Thruster | Use the thruster tool: press on a body where it pushes; a click pushes up, a drag aims the push. | `{}` |

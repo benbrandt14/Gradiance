@@ -214,6 +214,9 @@ pub enum ToolCommit {
         path: Vec<Vec2>,
         /// Stroke width (metres).
         width: f32,
+        /// Erase the stroke from the bodies it touches instead
+        /// (`body.erase`, brief S-16).
+        erase: bool,
     },
     /// Draw a spur gear (the gear tool, brief S-5): invokes the
     /// `body.spawn_gear` operation, one undo step.
@@ -490,12 +493,14 @@ impl ToolCommitWriters<'_> {
                         &path, link, width, ends, pins,
                     ));
             }
-            ToolCommit::Sketch { path, width } => {
+            ToolCommit::Sketch { path, width, erase } => {
                 // Through the operation, like the chain: one lowering for
                 // the tool and the verb, and Adjust Last Operation can
                 // change the width afterwards.
                 self.invoke
-                    .write(crate::tools::sketch_tool::sketch_invocation(&path, width));
+                    .write(crate::tools::sketch_tool::sketch_invocation(
+                        &path, width, erase,
+                    ));
             }
             ToolCommit::Gear { center, radius } => {
                 self.invoke

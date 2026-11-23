@@ -31,7 +31,7 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Drag (force in play) | present | `tool.drag` (mouse spring, `physics::grab`) |
 | Knife / cut | present | `tool.cut`, `cut` |
 | Sketch (freehand body) | partial | `tool.sketch` (N-6). No gesture grammar: rejected (owner, 2026-11-21: no shape recognition) |
-| Brush (paint/erase area) | partial | sketch tool paints; erase mode: **S-16** |
+| Brush (paint/erase area) | present | sketch tool paints; Alt+drag erases, `body.erase` (S-16) |
 | Hinge / axle | present | `tool.hinge`, `hinge` (body-body and world pin) |
 | Fixate | present | `tool.weld` |
 | Spring | present | `tool.spring`, `spring`; spring from empty space pins to the world (J-1) |

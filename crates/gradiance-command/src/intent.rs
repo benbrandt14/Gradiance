@@ -88,6 +88,8 @@ pub mod name {
     /// [`SpongeIntent`](super::SpongeIntent) → `SpongeCommand`
     /// (brief S-12).
     pub const SPONGE: &str = "sponge";
+    /// [`EraseIntent`](super::EraseIntent) → `EraseCommand` (brief S-16).
+    pub const ERASE: &str = "erase";
 }
 
 /// Request to spawn one fully-specified body.
@@ -316,6 +318,17 @@ pub struct CutIntent {
     /// Stroke end, world space.
     pub b: Vec2,
     /// Stroke width, world metres.
+    pub width: f32,
+}
+
+/// Request to erase a brush stroke from every body it touches (brief
+/// S-16): the sketch tool's erase mode and `(erase path width)`.
+// Trace: dispatch.rs → EraseCommand (cut_cmd.rs) → sync_colliders, sync_body_meshes (pieces replace each touched body).
+#[derive(Message, Debug, Clone, Reflect)]
+pub struct EraseIntent {
+    /// The stroke, world space.
+    pub line: Vec<Vec2>,
+    /// The brush width, world metres.
     pub width: f32,
 }
 
