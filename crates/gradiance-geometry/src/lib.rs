@@ -5,6 +5,7 @@
 //! results into engine types.
 
 pub mod align;
+pub mod alpha_mask;
 pub mod array;
 pub mod beam;
 pub mod chain;

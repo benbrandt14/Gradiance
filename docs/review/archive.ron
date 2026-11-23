@@ -5370,5 +5370,32 @@ Settings are global, so flip between the options rather than viewing them side b
             ),
             ingested_as: "S-13 (brief Outcome)",
         ),
+        (
+            question: (
+                id: "image-import-polygon",
+                title: "An imported image becomes a polygon",
+                source: "S-14",
+                description: r#"Option A adds a sampled-grid SDF leaf that keeps the image editable. Option B traces the image once at import into a Polygon."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Traced polygon (B)",
+                        caption: r#"No new leaf and no format change; the outline is a polygon like any other. Re-import to change it."#,
+                    ),
+                    (
+                        label: "Grid leaf (A)",
+                        caption: r#"A new ShapeDef leaf with a stored grid: editable later, but a format bump and a new leaf in every match."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "image-import-polygon",
+                title: "An imported image becomes a polygon",
+                choice: Picked("Traced polygon (B)"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-14 (polygonize_alpha, scene.import_image)",
+        ),
     ],
 )

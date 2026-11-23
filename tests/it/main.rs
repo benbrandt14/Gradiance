@@ -35,6 +35,7 @@ mod graph_keys;
 mod groups;
 mod headless_run;
 mod history;
+mod image_import;
 mod initial_motion;
 mod interaction;
 mod joint_breaking;

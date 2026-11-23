@@ -87,7 +87,7 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Make sponge (soft body) | present | `body.sponge`, context "Make sponge" (S-12, spring lattice) |
 | Appearance: colour, opacity, border | present | `Appearance { fill (RGBA), border, emissive }`, `set-color` |
 | Text on object | declined | owner rejected notes/annotations (2026-11-19); `label` names a body in the viewport |
-| Geometry from image | missing | **S-14** |
+| Geometry from image | present | `scene.import_image`, File "Import image as body" (S-14, traced polygon) |
 | Material: density, friction, restitution | present | inspector, `set-density`, `set-friction`, `set-restitution` |
 | Material: mass entry | partial | density only; mass is derived (the field was in the rejected presets brief) |
 | Material: refractive index | done | **S-3** (`Optics`, `set-index`, inspector) |

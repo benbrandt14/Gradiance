@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 178 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 179 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -210,6 +210,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | Id | Lisp call | Seam | Undo step | Menu / key | Doc | Example params |
 |---|---|---|---|---|---|---|
 | `scene.dump` | `(scene-dump)` | query | — | — | The whole scene as JSON: the record a save writes (bodies with their groups and depth, joints with their anchors, nodes, and the environment). Lisp gets the JSON text. | `{}` |
+| `scene.import_image` | `(import-image path x y width)` | edit | `spawn-body` | File/Import image as body… | Import the image file path (a PNG; relative to the scene file's folder; "": a file dialog) as one body whose outline follows its opaque pixels (alpha at least 0.5; the largest part), width metres wide, centred at (x, y), with the image on its face — one undo step. Returns its handle. | `{"path": "assets/images/import-disc.png", "x": 0, "y": 2, "width": 1}` |
 | `scene.insert` | `(insert-scene path at)` | edit | `insert` | File/Insert… | Add a .ron file's bodies, joints, nodes and groups to the scene with fresh ids, one undo step ("" = a dialog). `at`: [] keeps the file's positions, [x y] centres the bodies there. Returns the new bodies' ids. | `{"path": "tests/fixtures/scenes/pendulum.ron", "at": [6, 2]}` |
 | `scene.load` | `(load-scene path)` | edit | `load-scene` | File/Open…, Ctrl+O | Replace the scene with a .ron file's (relative to the working directory; "" = a dialog): one undo step, as File ▸ Open. An unreadable file is an error and changes nothing. | `{"path": "tests/fixtures/scenes/pendulum.ron"}` |
 | `scene.new` | `(new-scene)` | edit | `load-scene` | File/New scene | Replace the scene with an empty one (default gravity, look and signals; your grid, snap, camera and workspaces stay) — one undo step, as File ▸ New scene. | `{}` |

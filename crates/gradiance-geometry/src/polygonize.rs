@@ -96,6 +96,41 @@ pub fn polygonize_components_on_axes(shape: &ShapeDef) -> Vec<Contours> {
     }
 }
 
+/// The most vertices an outline traced from an image keeps (brief S-14).
+pub const MAX_IMAGE_VERTICES: usize = 256;
+
+/// Traces the opaque pixels of `mask`, an image `width_m` metres wide
+/// centred on the origin, into the contours of its largest opaque part
+/// (brief S-14). The image's field is contoured here like every other
+/// field, then each ring is simplified to at most [`MAX_IMAGE_VERTICES`].
+/// `None` when nothing is opaque.
+#[must_use]
+pub fn polygonize_alpha(mask: &crate::alpha_mask::AlphaMask, width_m: f32) -> Option<Contours> {
+    if !(width_m.is_finite() && width_m > 0.0) {
+        return None;
+    }
+    let extent = mask.extent(width_m);
+    let pixel = width_m / mask.size().0 as f32;
+    // A pixel, but never more samples than a coarse tree takes.
+    let cell = pixel.max(extent.max_element() / (2.0 * FIELD_CELLS));
+    let margin = Vec2::splat(2.0 * cell);
+    let field = mask.field(width_m);
+    let largest = contour_components(&field, -extent * 0.5 - margin, extent * 0.5 + margin, cell)
+        .into_iter()
+        .max_by(|a, b| a.area().total_cmp(&b.area()))?;
+    let tolerance = 0.25 * cell;
+    let simplify = |ring: &[Vec2]| crate::sketch::simplify(ring, tolerance, MAX_IMAGE_VERTICES);
+    Some(Contours {
+        outline: simplify(&largest.outline),
+        holes: largest
+            .holes
+            .iter()
+            .map(|h| simplify(h))
+            .filter(|h| h.len() >= 3)
+            .collect(),
+    })
+}
+
 /// The most field samples a contoured tree with a thin feature takes: as
 /// many as a square tree takes at the coarse resolution
 /// ([`FIELD_CELLS`] across each side), so a fine contour costs no more
@@ -384,5 +419,31 @@ mod tests {
             "{}",
             parts[0].area()
         );
+    }
+
+    #[test]
+    fn a_disc_image_traces_to_its_area() {
+        use crate::alpha_mask::AlphaMask;
+        // A 200 px image, 2 m wide; a disc of 80 px (0.8 m) radius.
+        let n = 200;
+        let alpha = (0..n * n)
+            .map(|i| {
+                let (x, y) = ((i % n) as f32 + 0.5, (i / n) as f32 + 0.5);
+                let d = Vec2::new(x - 100.0, y - 100.0).length();
+                (80.5 - d).clamp(0.0, 1.0)
+            })
+            .collect();
+        let mask = AlphaMask::new(n, n, alpha).unwrap_or_else(|| unreachable!());
+        let traced = polygonize_alpha(&mask, 2.0).unwrap_or_else(|| unreachable!());
+        let exact = std::f32::consts::PI * 0.8 * 0.8;
+        let area = traced.area();
+        assert!((area / exact - 1.0).abs() < 0.02, "{area} vs {exact}");
+        assert!(traced.outline.len() <= MAX_IMAGE_VERTICES);
+        assert!(
+            crate::contours::ring_signed_area(&traced.outline) > 0.0,
+            "ccw"
+        );
+        let empty = AlphaMask::new(4, 4, vec![0.0; 16]).unwrap_or_else(|| unreachable!());
+        assert!(polygonize_alpha(&empty, 1.0).is_none());
     }
 }
