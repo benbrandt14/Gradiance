@@ -529,10 +529,6 @@ fn every_kind() -> Vec<NodeKind> {
             key: "e".into(),
             negative: None,
         },
-        NodeKind::Pad {
-            input: "LeftStickX".into(),
-            dead_zone: 0.1,
-        },
         NodeKind::Param {
             value: 1.0,
             min: 0.0,
@@ -546,6 +542,11 @@ fn every_kind() -> Vec<NodeKind> {
         NodeKind::HalfPlane,
         NodeKind::Csg(CsgOp::Xor),
         NodeKind::Placed,
+        // Appended last so the indices the tests below wire stay put.
+        NodeKind::Pad {
+            input: "LeftStickX".into(),
+            dead_zone: 0.1,
+        },
     ];
     for kind in &kinds {
         match kind {
