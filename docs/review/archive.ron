@@ -5586,5 +5586,59 @@ Settings are global, so flip between the options rather than viewing them side b
             ),
             ingested_as: "S-17, persist::browser::trash",
         ),
+        (
+            question: (
+                id: "share-bundle-stored-zip",
+                title: "A shared scene is a stored ZIP written in-house",
+                source: "brief S-18",
+                description: r#"The brief asks for a ZIP with scene.ron at the root and says to check that the zip crate is in Cargo.lock. It is not. The persist layer writes and reads a stored (uncompressed) ZIP itself, with CRC-32, about 200 lines. The reader takes stored entries only and names the fix for a compressed one."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Stored ZIP, written in-house",
+                        caption: r#"No lockfile change, any unzip tool opens it, and the PNGs inside are compressed already, so compression gains little."#,
+                    ),
+                    (
+                        label: "Add the zip crate",
+                        caption: r#"Reads any ZIP, but a new crate and its dependencies are a reviewed lockfile change for a feature that needs one format."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "share-bundle-stored-zip",
+                title: "A shared scene is a stored ZIP written in-house",
+                choice: Picked("Stored ZIP, written in-house"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-18, persist::bundle",
+        ),
+        (
+            question: (
+                id: "shared-bundle-opens-to-temp",
+                title: "An opened bundle extracts its images to a temp folder",
+                source: "brief S-18",
+                description: r#"Opening a shared .zip writes its images under the temp directory (gradiance-bundles/<name>-<crc>) and makes that the scene folder, so texture paths resolve. The last-save path is cleared, so Ctrl+S asks where to save."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Extract to a temp folder",
+                        caption: r#"Opening never writes beside the person's file, and a save goes where they choose."#,
+                    ),
+                    (
+                        label: "Extract beside the bundle",
+                        caption: r#"The images stay with the file, but opening writes into the person's folder without asking."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "shared-bundle-opens-to-temp",
+                title: "An opened bundle extracts its images to a temp folder",
+                choice: Picked("Extract to a temp folder"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-18, persist::open_bundle",
+        ),
     ],
 )
