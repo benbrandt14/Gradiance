@@ -236,10 +236,93 @@ pub fn apply_air_drag(
     }
 }
 
+/// The air's push on a body (brief S-22): the weight of the air its
+/// outline displaces, against `gravity`, and the point it acts at in the
+/// body's frame (the outline's centroid). `None` for no air, no area or no
+/// gravity. Pure.
+#[must_use]
+pub fn air_lift(
+    gravity: Vec2,
+    air_density: f32,
+    outline: gradiance_geometry::submerge::AreaMoment,
+) -> Option<(Vec2, Vec2)> {
+    if !(air_density.is_finite() && air_density > 0.0 && gravity.is_finite()) {
+        return None;
+    }
+    let centroid = outline.centroid()?;
+    let force = -gravity * (air_density * outline.area);
+    (force != Vec2::ZERO).then_some((force, centroid))
+}
+
+/// **The air buoyancy pass** (brief S-22): with
+/// [`SimSettings::air_buoyancy`] on, every dynamic body feels
+/// [`air_lift`] at its centroid, once per physics step beside the drag
+/// pass. Returns at once while the switch is off (the default).
+///
+/// The area is the body's derived [`SubmergeOutline`](crate::buoyancy::SubmergeOutline),
+/// the exact outline the water buoyancy clips (holes and concave parts
+/// count), not the convex drag panels. Gravity is the world's, as in
+/// water: a body's gravity scale changes its weight, not the air's.
+///
+/// Cost: `O(B · V)` for `B` bodies of `V` outline vertices (one area
+/// moment each); no allocation, no contour.
+pub fn apply_air_buoyancy(
+    settings: Res<SimSettings>,
+    gravity: Res<Gravity>,
+    mut bodies: Query<(Forces, &RigidBody, &crate::buoyancy::SubmergeOutline), With<Body>>,
+) {
+    if !settings.air_buoyancy {
+        return;
+    }
+    let density = settings.air_density.value();
+    for (mut forces, rigid_body, outline) in &mut bodies {
+        if !rigid_body.is_dynamic() || outline.0.is_empty() {
+            continue;
+        }
+        let Some((force, centroid)) = air_lift(gravity.0, density, outline.0.moment()) else {
+            continue;
+        };
+        let at = forces.position() + forces.rotation() * centroid;
+        forces.apply_force_at_point(force, at);
+    }
+}
+
+/// Wakes every sleeping dynamic body when air buoyancy turns on, so a light
+/// body resting asleep on the floor rises. Runs on a settings change only.
+pub fn wake_on_air_buoyancy(
+    settings: Res<SimSettings>,
+    mut was_on: Local<bool>,
+    mut commands: Commands,
+    bodies: Query<(Entity, &RigidBody), (With<Body>, With<Sleeping>)>,
+) {
+    let on = settings.air_buoyancy;
+    if on && !*was_on {
+        for (entity, rigid_body) in &bodies {
+            if rigid_body.is_dynamic() {
+                commands.queue(WakeBody(entity));
+            }
+        }
+    }
+    *was_on = on;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use gradiance_units::{Density, Velocity2};
+
+    #[test]
+    fn air_lift_is_the_weight_of_the_displaced_air() {
+        let square = gradiance_geometry::submerge::AreaMoment {
+            area: 2.0,
+            first: Vec2::new(1.0, 2.0),
+        };
+        let (force, at) = air_lift(Vec2::new(0.0, -10.0), 1.2, square).unwrap_or_default();
+        assert!((force - Vec2::new(0.0, 24.0)).length() < 1e-4, "{force}");
+        assert_eq!(at, Vec2::new(0.5, 1.0));
+        assert_eq!(air_lift(Vec2::ZERO, 1.2, square), None);
+        assert_eq!(air_lift(Vec2::NEG_Y, 0.0, square), None);
+    }
 
     fn plate() -> WidthProfile {
         WidthProfile::from_points(&[

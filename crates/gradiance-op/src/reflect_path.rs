@@ -92,8 +92,8 @@ fn newtype_inner_mut(value: &mut dyn PartialReflect) -> Option<&mut dyn PartialR
 
 /// Read the scalar at a reflect path as `f64`. Generic over the concrete root
 /// so the `GetPath` blanket impl applies (`&dyn PartialReflect` does not
-/// satisfy it). Returns `None` if the path is missing or the leaf is not a
-/// numeric scalar.
+/// satisfy it). A flag reads as 1 or 0. Returns `None` if the path is
+/// missing or the leaf is not a numeric scalar or a flag.
 pub fn read_path<T: Reflect>(root: &T, path: &str) -> Option<f64> {
     let leaf = unwrap_newtype(resolve(root.as_partial_reflect(), path)?);
     let any = leaf.try_as_reflect()?.as_any();
@@ -102,6 +102,7 @@ pub fn read_path<T: Reflect>(root: &T, path: &str) -> Option<f64> {
         .or_else(|| any.downcast_ref::<f64>().copied())
         .or_else(|| any.downcast_ref::<u32>().map(|v| f64::from(*v)))
         .or_else(|| any.downcast_ref::<i32>().map(|v| f64::from(*v)))
+        .or_else(|| any.downcast_ref::<bool>().map(|v| f64::from(u8::from(*v))))
 }
 
 /// Write an `f64` onto the scalar at a reflect path, coercing to the leaf's

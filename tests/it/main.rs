@@ -9,6 +9,7 @@
 //! `tests/boundaries.rs` intentionally stays a separate binary: it links no
 //! Bevy and CI runs it as an early, fast gate.
 
+mod air_buoyancy;
 mod gamepad;
 mod harness;
 

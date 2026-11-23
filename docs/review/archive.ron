@@ -5856,5 +5856,59 @@ Settings are global, so flip between the options rather than viewing them side b
             ),
             ingested_as: "crates/gradiance-interaction/src/camera_gestures.rs",
         ),
+        (
+            question: (
+                id: "air-buoyancy-area-from-outline",
+                title: "Which area air buoyancy uses",
+                source: "S-22",
+                description: r#"The brief names the outline the drag pass reads. That is the convex hull, which counts a notch or a hole as solid."#,
+                decision: true,
+                options: [
+                    (
+                        label: "The exact outline",
+                        caption: r#"The water buoyancy's SubmergeOutline: holes and concave parts count, so air and water agree on a body's volume."#,
+                    ),
+                    (
+                        label: "The drag hull",
+                        caption: r#"A C-shaped body would displace air it does not hold."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "air-buoyancy-area-from-outline",
+                title: "Which area air buoyancy uses",
+                choice: Picked("The exact outline"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "crates/gradiance-physics/src/air.rs",
+        ),
+        (
+            question: (
+                id: "air-buoyancy-world-gravity",
+                title: "Which gravity air buoyancy uses",
+                source: "S-22",
+                description: r#"A body has a gravity scale. The air does not."#,
+                decision: true,
+                options: [
+                    (
+                        label: "World gravity",
+                        caption: r#"As in water: a gravity scale changes a body's weight, not the weight of the air it displaces."#,
+                    ),
+                    (
+                        label: "The body's scaled gravity",
+                        caption: r#"A body with gravity scale 0 would feel no lift, unlike in water."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "air-buoyancy-world-gravity",
+                title: "Which gravity air buoyancy uses",
+                choice: Picked("World gravity"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "crates/gradiance-physics/src/air.rs",
+        ),
     ],
 )
