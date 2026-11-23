@@ -66,7 +66,7 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Tutorials, lessons | declined | owner, 2026-11-19 ("not an educational tool") |
 | Language choice | partial | string table `assets/lang/en.ron`, Settings > Interface > Language; menu bar on the table, other panels ratchet (S-19) |
 | UI scale | *unverified* | egui zoom not checked |
-| Joystick | missing | **S-20** |
+| Joystick | done | `(defpad name input)`, the node graph's Pad block; first gamepad, dead zone (S-20) |
 | Multi-touch, trackpad gestures | missing | **S-21** |
 
 ## Object context menu

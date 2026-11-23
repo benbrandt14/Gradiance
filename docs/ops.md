@@ -2,7 +2,7 @@
 
 <!-- Generated from the operation registry by `tests/it/op_conformance.rs` (`docs_ops_md_is_current`). Do not edit by hand: run `UPDATE_OPS_DOC=1 cargo test --test it docs_ops_md_is_current`. -->
 
-Every Lisp verb, remote call, menu row and key edit is one of these 185 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
+Every Lisp verb, remote call, menu row and key edit is one of these 186 operations, declared once in the layer that owns it (`gradiance-op`; the recipe is in `docs/scripting.md`), or one of the 7 VM built-ins at the end. Remote: `gradiance.op {"id", "params"}` takes the id and the named params; `{"name", "args"}` takes the Lisp name and the params in call order.
 
 Seams: **edit** lowers to an undoable intent; **config** writes a settings resource; **query** returns a value and writes nothing; **editor** writes non-authored editor state. A query's NaN ("nothing there") is `null` over remote.
 
@@ -238,6 +238,7 @@ Seams: **edit** lowers to an undoable intent; **config** writes a settings resou
 | `signal.get` | `(signal-get name)` | query | — | — | Current value of a named signal on the bus; NaN if unset. | `{"name": "t"}` |
 | `signal.history` | `(signal-history name)` | query | — | — | A signal's recorded samples, oldest first, as a list of [t v] (t in simulated seconds; the last 600, recorded while the sim plays or steps); empty if the bus has no such signal. | `{"name": "t"}` |
 | `signal.key` | `(defkey name key [negative])` | config | `settings` | — | Declare a key input: a signal that is 1 while key is held in play (0 paused or while a field has the keyboard); with negative, -1 while that key is held and 0 when both are. While the sim plays the key is the input's, not the editor's. | `{"name": "throttle", "key": "E", "negative": "Q"}` |
+| `signal.pad` | `(defpad name input [dead_zone])` | config | `settings` | — | Declare a gamepad input: a signal that reads a stick (-1..1) or a button (0..1) of the first connected gamepad while the sim plays (0 paused). Values inside dead_zone (default 0.1) read 0, and the rest of the travel is rescaled to reach 1. | `{"name": "steer", "input": "LeftStickX", "dead_zone": 0.1}` |
 | `signal.param` | `(defparam name value min max)` | config | `settings` | — | Declare a tunable signal parameter (an auto-slider) published on the bus. | `{"name": "amp", "value": 2, "min": 0, "max": 10}` |
 | `signal.set` | `(signal-set name value)` | editor | — | — | Publish a named value on the signal bus (drives bindings; docs/signal-dataflow.md). | `{"name": "excitement", "value": 7}` |
 | `signal.unbind` | `(unbind name)` | config | `settings` | — | Remove the signal binding of this name; an actuator it drove returns to its authored value. | `{"name": "drive"}` |

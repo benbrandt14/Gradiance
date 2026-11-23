@@ -106,6 +106,7 @@ pub(crate) fn install(app: &mut App) {
         registry.register::<DefParam>();
         registry.register::<DefSignal>();
         registry.register::<DefKey>();
+        registry.register::<DefPad>();
         registry.register::<Bind>();
         registry.register::<Unbind>();
         registry.register::<SignalHistory>();
@@ -429,6 +430,58 @@ impl Operation for DefKey {
             OpOutput::none().message(EditorRequest::Computed(ComputedSignal::from_block(
                 self.name,
                 BlockOp::Key { key, negative },
+            ))),
+        )
+    }
+}
+
+/// Declare a gamepad input (brief S-20): the node graph's Pad block, as a
+/// computed signal. Scene content with one settled `settings` undo step,
+/// like [`DefKey`].
+#[derive(Debug, Deserialize, Reflect)]
+#[serde(deny_unknown_fields)]
+pub struct DefPad {
+    /// The input's name (unique: re-declaring updates it).
+    pub name: String,
+    /// The stick or button it reads (`LeftStickX`, `RightZ`, `South`).
+    pub input: String,
+    /// The dead zone (absent: 0.1). Held to 0..0.9.
+    pub dead_zone: Option<f32>,
+}
+
+impl Operation for DefPad {
+    const META: OpMeta = OpMeta {
+        id: "signal.pad",
+        lisp: "defpad",
+        doc: "Declare a gamepad input: a signal that reads a stick (-1..1) or a button (0..1) of the first connected gamepad while the sim plays (0 paused). Values inside dead_zone (default 0.1) read 0, and the rest of the travel is rescaled to reach 1.",
+        seam: Seam::Config,
+        menu: None,
+        chord: None,
+        undo: Some(gradiance_command::intent::name::SETTINGS),
+        example: r#"{"name": "steer", "input": "LeftStickX", "dead_zone": 0.1}"#,
+    };
+
+    fn lower(self, _ctx: &OpContext) -> Result<OpOutput, OpError> {
+        use gradiance_domain::pad;
+        let input = pad::named_pad(&self.input)
+            .map(|p| p.name.to_owned())
+            .ok_or_else(|| {
+                OpError::Invalid(format!("`{}` is not a gamepad input name", self.input))
+            })?;
+        let dead_zone = match self.dead_zone {
+            None => pad::DEFAULT_DEAD_ZONE,
+            Some(dz) if dz.is_finite() && (0.0..=pad::MAX_DEAD_ZONE).contains(&dz) => dz,
+            Some(dz) => {
+                return Err(OpError::Invalid(format!(
+                    "dead_zone {dz} is outside 0..{}",
+                    pad::MAX_DEAD_ZONE
+                )));
+            }
+        };
+        Ok(
+            OpOutput::none().message(EditorRequest::Computed(ComputedSignal::from_block(
+                self.name,
+                BlockOp::Pad { input, dead_zone },
             ))),
         )
     }

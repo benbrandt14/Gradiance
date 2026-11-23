@@ -5694,5 +5694,86 @@ Settings are global, so flip between the options rather than viewing them side b
             ),
             ingested_as: "S-19, ui::text::Language",
         ),
+        (
+            question: (
+                id: "pad-dead-zone-in-bus-name",
+                title: "Where a pad input's dead zone lives",
+                source: "S-20",
+                description: r#"A pad block has a dead zone. It can live in the bus input name or in a per-frame table."#,
+                decision: true,
+                options: [
+                    (
+                        label: "In the bus name",
+                        caption: r#"The kernel reads pad@LeftStickX/0.1. Two blocks on one stick with two dead zones read two inputs. No new kernel state."#,
+                    ),
+                    (
+                        label: "A per-block table",
+                        caption: r#"The publisher looks up each block's dead zone. More state, same result."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "pad-dead-zone-in-bus-name",
+                title: "Where a pad input's dead zone lives",
+                choice: Picked("In the bus name"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "crates/gradiance-domain/src/pad.rs",
+        ),
+        (
+            question: (
+                id: "pad-first-gamepad",
+                title: "Which gamepad a pad input reads",
+                source: "S-20",
+                description: r#"Bevy can see more than one gamepad. A pad block names a stick, not a pad."#,
+                decision: true,
+                options: [
+                    (
+                        label: "The first connected gamepad",
+                        caption: r#"One person plays a scene at a time. A pad index can come later with no format change (serde default)."#,
+                    ),
+                    (
+                        label: "A pad index field now",
+                        caption: r#"Adds a field and UI that no current scene needs."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "pad-first-gamepad",
+                title: "Which gamepad a pad input reads",
+                choice: Picked("The first connected gamepad"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "crates/gradiance-interaction/src/graph_pads.rs",
+        ),
+        (
+            question: (
+                id: "pad-default-dead-zone",
+                title: "The default dead zone of a pad input",
+                source: "S-20",
+                description: r#"A worn stick rests a little off centre. The default sets what a new block reads at rest."#,
+                decision: true,
+                options: [
+                    (
+                        label: "0.1, rescaled",
+                        caption: r#"A worn stick reads 0 at rest, and full travel still reads 1."#,
+                    ),
+                    (
+                        label: "0, raw",
+                        caption: r#"A stick at rest drifts a motor or a thruster."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "pad-default-dead-zone",
+                title: "The default dead zone of a pad input",
+                choice: Picked("0.1, rescaled"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "crates/gradiance-domain/src/pad.rs",
+        ),
     ],
 )

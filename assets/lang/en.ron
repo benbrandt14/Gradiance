@@ -68,6 +68,11 @@
     "about-tagline": "An Algodoo-inspired 2.5D physics sandbox.",
     "about-format": "Scene format v{}",
 
+    "graph-pad": "Pad",
+    "graph-pad-hint": "a gamepad stick (-1..1) or button (0..1) in play",
+    "graph-pad-input-hint": "the stick or button this input reads",
+    "graph-pad-dead-zone": "dead zone",
+
     "settings-language": "Language",
     "settings-language-hint": "the language of the menus; a language is a file in assets/lang",
 }

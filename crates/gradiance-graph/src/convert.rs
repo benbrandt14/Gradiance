@@ -107,5 +107,12 @@ fn block_node(
             },
             Vec::new(),
         ),
+        BlockOp::Pad { input, dead_zone } => (
+            NodeKind::Pad {
+                input: input.clone(),
+                dead_zone: *dead_zone,
+            },
+            Vec::new(),
+        ),
     }
 }

@@ -1195,6 +1195,19 @@ impl GraphViewer {
                 });
                 ui.close();
             }
+            let ctx = ui.ctx().clone();
+            let tr = |id: &str| crate::text::tr(&ctx, id);
+            if ui
+                .button(tr("graph-pad"))
+                .on_hover_text(tr("graph-pad-hint"))
+                .clicked()
+            {
+                self.add_blocks.push(BlockOp::Pad {
+                    input: "LeftStickX".to_owned(),
+                    dead_zone: gradiance_domain::pad::DEFAULT_DEAD_ZONE,
+                });
+                ui.close();
+            }
         });
         ui.menu_button("Modulation", |ui| {
             let mut add = |ui: &mut egui::Ui, label: &str, op: BlockOp| {
@@ -1702,6 +1715,9 @@ fn block_constants(
         BlockOp::Key { key, negative } => {
             changed |= key_fields(ui, name, key, negative, editor_keys);
         }
+        BlockOp::Pad { input, dead_zone } => {
+            changed |= pad_fields(ui, name, input, dead_zone);
+        }
         // Ops without editable constants (their behavior is fully wired).
         BlockOp::Time
         | BlockOp::Sum { .. }
@@ -1711,6 +1727,39 @@ fn block_constants(
         | BlockOp::Min { .. }
         | BlockOp::Max { .. } => {}
     }
+    changed
+}
+
+/// A pad input's footer (brief S-20): the stick or button, and the dead
+/// zone.
+fn pad_fields(ui: &mut egui::Ui, name: &str, input: &mut String, dead_zone: &mut f32) -> bool {
+    use gradiance_domain::pad::{MAX_DEAD_ZONE, PADS};
+    let ctx = ui.ctx().clone();
+    let tr = |id: &str| crate::text::tr(&ctx, id);
+    let mut changed = false;
+    egui::ComboBox::from_id_salt(("graph-pad", name))
+        .selected_text(input.as_str())
+        .show_ui(ui, |ui| {
+            for pad in PADS {
+                if ui.selectable_label(*input == pad.name, pad.name).clicked() && *input != pad.name
+                {
+                    pad.name.clone_into(input);
+                    changed = true;
+                }
+            }
+        })
+        .response
+        .on_hover_text(tr("graph-pad-input-hint"));
+    ui.horizontal(|ui| {
+        ui.small(tr("graph-pad-dead-zone"));
+        if widgets::config_field(gradiance_domain::pad::DEFAULT_DEAD_ZONE, 0.01)
+            .show(ui, dead_zone)
+            .changed()
+        {
+            *dead_zone = dead_zone.clamp(0.0, MAX_DEAD_ZONE);
+            changed = true;
+        }
+    });
     changed
 }
 
