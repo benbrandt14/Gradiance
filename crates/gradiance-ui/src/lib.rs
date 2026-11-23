@@ -40,6 +40,7 @@ pub mod probe;
 pub mod ramp_editor;
 pub mod reflect_grid;
 pub mod review;
+pub mod scenes;
 pub mod search;
 pub mod settings;
 pub mod signals;
@@ -301,6 +302,7 @@ impl Plugin for GradianceUiPlugin {
                     // (brief A-1: it covered the bottom dock's tabs).
                     toolbar::toolbar,
                     probe::probe_panel,
+                    scenes::scenes_window,
                     // Bottom left of the viewport, over the scene (U-11).
                     adjust_panel::adjust_last_panel,
                     context_menu::context_menu,

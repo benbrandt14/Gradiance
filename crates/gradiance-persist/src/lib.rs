@@ -19,6 +19,7 @@ use gradiance_core::messages::drain;
 use gradiance_scene::{PersistError, SceneRecord, from_ron, to_ron};
 use std::path::{Path, PathBuf};
 
+pub mod browser;
 pub mod ops;
 pub mod review;
 
@@ -82,6 +83,8 @@ impl Plugin for PersistPlugin {
         // The scene-file operations (brief R-1): the menu, the keys and every
         // client save, open and dump through them.
         ops::install(app);
+        // The scene browser's disk side (brief S-17).
+        browser::install(app);
         app.add_systems(Startup, queue_startup_scene);
         app.add_systems(
             Update,
@@ -129,6 +132,7 @@ pub fn handle_persist_requests(world: &mut World) {
     let snapshots: Vec<SnapshotRequest> = drain(world);
     let inserts: Vec<ops::InsertSceneRequest> = drain(world);
     let imports: Vec<gradiance_command::ops::image::ImportImageRequest> = drain(world);
+    let files: Vec<browser::SceneFileRequest> = drain(world);
 
     for request in saves {
         let path = request
@@ -140,6 +144,11 @@ pub fn handle_persist_requests(world: &mut World) {
         match write_scene_file(&scene, &path) {
             Ok(()) => {
                 info!(path = %path.display(), "scene saved");
+                // The Scenes panel's thumbnail (brief S-17); a failed
+                // thumbnail never fails the save.
+                if let Err(e) = browser::write_thumbnail(&scene, &path) {
+                    warn!(path = %path.display(), error = %e, "thumbnail not written");
+                }
                 set_scene_folder(world, &path);
                 world.resource_mut::<LastScenePath>().0 = Some(path);
             }
@@ -194,6 +203,8 @@ pub fn handle_persist_requests(world: &mut World) {
             gradiance_op::json!({"path": path.to_string_lossy(), "at": request.at}),
         ));
     }
+
+    browser::handle_requests(world, files);
 
     for request in snapshots {
         let dir = request.dir.unwrap_or_else(|| PathBuf::from("snapshots"));

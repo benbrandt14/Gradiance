@@ -65,6 +65,7 @@ pub mod scale_cmd;
 pub mod scene_cmd;
 pub mod snapshot;
 pub mod spawn;
+pub mod thumbnail;
 pub mod transform_cmd;
 
 use bevy::prelude::*;

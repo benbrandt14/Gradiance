@@ -61,7 +61,7 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Velocity menu: show velocity / momentum / force arrows | done | **S-2b** (per body: Appearance arrows, `set-arrows`; `debug.velocities` stays the global overlay) |
 | Direction picker for velocity | done | **S-1** (#306: inspector Starting motion dial) |
 | File load / save / new | present | `load-scene`, `save-scene`, `new-scene`, File menu |
-| File browser with thumbnails | missing | **S-17** |
+| File browser with thumbnails | present | Scenes panel, `scene.browse_dir`, `scene.rename`, `scene.trash` (S-17) |
 | Online scene sharing | missing | **S-18** (one-file share, no server) |
 | Tutorials, lessons | declined | owner, 2026-11-19 ("not an educational tool") |
 | Language choice | missing | **S-19** (string table) |

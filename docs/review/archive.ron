@@ -5505,5 +5505,86 @@ Settings are global, so flip between the options rather than viewing them side b
             ),
             ingested_as: "S-16, command::cut_cmd (EraseCommand)",
         ),
+        (
+            question: (
+                id: "thumbnail-from-records",
+                title: "A scene thumbnail is drawn from the records",
+                source: "brief S-17",
+                description: r#"The brief says to capture the viewport, 256 px wide. The save instead draws the bodies flat in their fill colours on the look's backdrop, 256 x 160, from the saved records (an SDF inside test per pixel)."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Draw from the records",
+                        caption: r#"Works in a headless or CLI save, the same bytes every time, testable without a window, and free of gizmos and panels."#,
+                    ),
+                    (
+                        label: "Capture the viewport",
+                        caption: r#"Shows the toon look and lighting, but needs a window and a settled frame, and a headless save writes no thumbnail."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "thumbnail-from-records",
+                title: "A scene thumbnail is drawn from the records",
+                choice: Picked("Draw from the records"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-17, command::thumbnail",
+        ),
+        (
+            question: (
+                id: "scene-browser-folder-not-saved",
+                title: "The Scenes folder is not saved in the scene",
+                source: "brief S-17",
+                description: r#"The brief calls the browser folder workstation config of the GridSettings class, which is saved with the scene. The folder is a resource the person sets (scene.browse_dir), never undone and not written into scene files. Unset, the panel shows the open scene's folder, else the working directory."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Not saved in the scene",
+                        caption: r#"An absolute path in a shared file shows the author's disk layout and does not resolve on another machine."#,
+                    ),
+                    (
+                        label: "Saved with the scene, as GridSettings",
+                        caption: r#"Follows the brief's class, but the path travels with every shared scene."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "scene-browser-folder-not-saved",
+                title: "The Scenes folder is not saved in the scene",
+                choice: Picked("Not saved in the scene"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-17, persist::browser::ScenesFolder",
+        ),
+        (
+            question: (
+                id: "scene-trash-folder",
+                title: "Trash moves a scene into a .trash folder",
+                source: "brief S-17",
+                description: r#"Delete in the Scenes panel, after a confirm, moves the scene and its thumbnail into a .trash folder beside them (scene.trash). It does not use the platform trash."#,
+                decision: true,
+                options: [
+                    (
+                        label: "A .trash folder beside the scene",
+                        caption: r#"No new dependency (a platform trash crate changes Cargo.lock), the same on every platform, and a mistake is one file move from undone."#,
+                    ),
+                    (
+                        label: "The platform trash",
+                        caption: r#"What a desktop user expects, but needs a new crate."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "scene-trash-folder",
+                title: "Trash moves a scene into a .trash folder",
+                choice: Picked("A .trash folder beside the scene"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-17, persist::browser::trash",
+        ),
     ],
 )
