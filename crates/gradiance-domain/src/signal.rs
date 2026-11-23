@@ -1022,6 +1022,20 @@ pub enum BlockOp {
         /// The key that drives it to `-1` (`None`: a single key, `0`/`1`).
         negative: Option<String>,
     },
+    /// A **gamepad input** (brief S-20): a stick's position (−1..1) or a
+    /// button's travel (0..1) during play, `0` paused. Inputs are saved by
+    /// name ([`pad`](crate::pad)); within `dead_zone` of rest the output is
+    /// `0`, and the rest of the travel is rescaled to reach `±1`. The value
+    /// reaches the kernel as the bus input
+    /// [`pad_input_name`](crate::pad::pad_input_name) names, published each
+    /// frame by the interaction layer (derived, never saved, never undone).
+    Pad {
+        /// The stick or button (`LeftStickX`, `South`, `RightTrigger2`).
+        input: String,
+        /// Travel near rest that reads 0 (0..0.9).
+        #[serde(default)]
+        dead_zone: f32,
+    },
 }
 
 /// The bus-input prefix of a key's held state (`key@E`): the same
@@ -1082,6 +1096,9 @@ impl BlockOp {
                     None => held(key),
                 }
             }
+            Self::Pad { input, dead_zone } => {
+                SignalExpr::Input(crate::pad::pad_input_name(input, *dead_zone))
+            }
         }
     }
 
@@ -1089,9 +1106,11 @@ impl BlockOp {
     /// input pins — empty for source blocks.
     pub fn input_slots(&self) -> Vec<(&'static str, Option<String>)> {
         match self {
-            Self::Time | Self::Constant { .. } | Self::Oscillator { .. } | Self::Key { .. } => {
-                Vec::new()
-            }
+            Self::Time
+            | Self::Constant { .. }
+            | Self::Oscillator { .. }
+            | Self::Key { .. }
+            | Self::Pad { .. } => Vec::new(),
             Self::Gain { input, .. } | Self::Abs { input } | Self::Curve { input, .. } => {
                 vec![("in", input.clone())]
             }
@@ -1108,7 +1127,11 @@ impl BlockOp {
     /// Sets input slot `i` to `name` (`None` = disconnect).
     pub fn set_input(&mut self, i: usize, name: Option<String>) {
         match self {
-            Self::Time | Self::Constant { .. } | Self::Oscillator { .. } | Self::Key { .. } => {}
+            Self::Time
+            | Self::Constant { .. }
+            | Self::Oscillator { .. }
+            | Self::Key { .. }
+            | Self::Pad { .. } => {}
             Self::Gain { input, .. } | Self::Abs { input } | Self::Curve { input, .. } => {
                 if i == 0 {
                     *input = name;
@@ -1141,6 +1164,7 @@ impl BlockOp {
             Self::Max { .. } => "max",
             Self::Curve { .. } => "curve",
             Self::Key { .. } => "key",
+            Self::Pad { .. } => "pad",
         }
     }
 }

@@ -306,6 +306,7 @@ impl Plugin for GradianceUiPlugin {
                     toolbar::toolbar,
                     probe::probe_panel,
                     scenes::scenes_window,
+                    text::share_with_egui,
                     // Bottom left of the viewport, over the scene (U-11).
                     adjust_panel::adjust_last_panel,
                     context_menu::context_menu,

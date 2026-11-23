@@ -253,6 +253,14 @@ pub enum NodeKind {
         /// The key that drives it to `-1`.
         negative: Option<String>,
     },
+    /// A gamepad input's value (brief S-20): a stick −1..1 or a button
+    /// 0..1, past a dead zone. Reads the external `pad@<name>` bus input.
+    Pad {
+        /// The stick or button.
+        input: String,
+        /// Travel near rest that reads 0.
+        dead_zone: f32,
+    },
     /// A tunable parameter (`defparam`): an edit-rate scalar that also
     /// publishes each frame under its label.
     Param {

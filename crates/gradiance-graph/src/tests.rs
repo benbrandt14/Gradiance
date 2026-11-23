@@ -542,6 +542,11 @@ fn every_kind() -> Vec<NodeKind> {
         NodeKind::HalfPlane,
         NodeKind::Csg(CsgOp::Xor),
         NodeKind::Placed,
+        // Appended last so the indices the tests below wire stay put.
+        NodeKind::Pad {
+            input: "LeftStickX".into(),
+            dead_zone: 0.1,
+        },
     ];
     for kind in &kinds {
         match kind {
@@ -557,6 +562,7 @@ fn every_kind() -> Vec<NodeKind> {
             | NodeKind::Max
             | NodeKind::Curve
             | NodeKind::Key { .. }
+            | NodeKind::Pad { .. }
             | NodeKind::Param { .. }
             | NodeKind::Expr(_)
             | NodeKind::Box

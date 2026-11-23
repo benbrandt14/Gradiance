@@ -23,6 +23,7 @@ pub mod cursor;
 pub mod debug_ops;
 pub mod gesture;
 pub mod graph_keys;
+pub mod graph_pads;
 pub mod indicators;
 pub mod input;
 pub mod joint_edit;
@@ -132,6 +133,7 @@ impl Plugin for InteractionPlugin {
         app.add_plugins(input::EditorInputPlugin);
 
         graph_keys::install(app);
+        graph_pads::install(app);
         app.add_plugins(tools::ToolsPlugin);
 
         // After `InputSystems`: the button edges and the cursor must describe

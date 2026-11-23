@@ -96,6 +96,42 @@ impl Strings {
     }
 }
 
+/// Where [`share_with_egui`] keeps the table in egui's memory.
+fn egui_key() -> bevy_egui::egui::Id {
+    bevy_egui::egui::Id::new("gradiance-strings")
+}
+
+/// English, parsed once, for [`tr`] before the first frame shares a table.
+static ENGLISH_STRINGS: std::sync::LazyLock<Strings> = std::sync::LazyLock::new(Strings::default);
+
+/// The label for `id` from the table the last frame shared with `ctx`: for
+/// panel code deep in a call tree that has the `Ui` but not the resource.
+#[must_use]
+pub fn tr(ctx: &bevy_egui::egui::Context, id: &str) -> String {
+    ctx.data(|d| d.get_temp::<std::sync::Arc<Strings>>(egui_key()))
+        .map_or_else(
+            || ENGLISH_STRINGS.t(id).to_owned(),
+            |strings| strings.t(id).to_owned(),
+        )
+}
+
+/// Shares the active table with egui's memory when it changes (or on the
+/// first frame), so [`tr`] reads it.
+pub fn share_with_egui(
+    mut contexts: bevy_egui::EguiContexts,
+    strings: Res<Strings>,
+    mut shared: Local<bool>,
+) -> Result {
+    if *shared && !strings.is_changed() {
+        return Ok(());
+    }
+    let ctx = contexts.ctx_mut()?;
+    let table = std::sync::Arc::new(strings.clone());
+    ctx.data_mut(|d| d.insert_temp(egui_key(), table));
+    *shared = true;
+    Ok(())
+}
+
 /// The language codes with a table in `dir`, English first.
 #[must_use]
 pub fn languages(dir: &Path) -> Vec<String> {
