@@ -49,6 +49,7 @@ pub const SIM_SETTING_PATHS: &[&str] = &[
     "linear_drag",
     "wind.x",
     "wind.y",
+    "air_buoyancy",
 ];
 
 /// The `CameraSettings` reflect paths `camera-get`/`camera-set` advertise;

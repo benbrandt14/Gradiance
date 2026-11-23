@@ -292,6 +292,7 @@
             drag_coefficient: 0.75,
             linear_drag: 0.5,
             wind: (2.5, -0.5),
+            air_buoyancy: true,
         ),
         grid: (
             visible: true,

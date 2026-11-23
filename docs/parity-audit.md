@@ -52,7 +52,7 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Undo / redo, undo a run | present | `undo`, `redo`; a run is one undo step |
 | Gravity on/off, strength, direction | present | Settings > Simulation dial, `sim-set "gravity…"` |
 | Air friction, wind | present | `SimSettings` drag/wind (N-4) |
-| Air buoyancy | missing | **S-22** |
+| Air buoyancy | done | `SimSettings.air_buoyancy`, Settings > Simulation > Air; exact outline area, world gravity (S-22) |
 | Sim speed, frequency, iterations | present | `SimSettings.speed`, `timestep_hz`, `substeps` |
 | Grid, snap | present | `GridSettings`, `SnapConfig` (Phase 1) |
 | Collision layers (check/uncheck all) | present | `DepthBand` ≡ layer, Depth panel, context menu Depth |

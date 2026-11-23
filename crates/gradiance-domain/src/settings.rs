@@ -412,6 +412,12 @@ pub struct SimSettings {
     /// to it, so with drag on a free body drifts until it moves with the
     /// wind; with both drag terms at 0 the wind does nothing.
     pub wind: Velocity2,
+    /// Air buoyancy (brief S-22): every dynamic body feels the weight of
+    /// the air it displaces, `air_density × area`, against gravity at its
+    /// centroid, so a body less dense than the air rises. Off by default,
+    /// so a scene saved before it behaves the same.
+    #[serde(default)]
+    pub air_buoyancy: bool,
 }
 
 fn default_substeps() -> u32 {
@@ -434,6 +440,7 @@ impl Default for SimSettings {
             drag_coefficient: 0.0,
             linear_drag: 0.0,
             wind: Velocity2(Vec2::ZERO),
+            air_buoyancy: false,
         }
     }
 }

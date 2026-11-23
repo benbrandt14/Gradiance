@@ -159,6 +159,8 @@ impl Plugin for GradiancePhysicsPlugin {
                 (
                     thrust::apply_thrusters,
                     air::apply_air_drag,
+                    air::apply_air_buoyancy,
+                    air::wake_on_air_buoyancy,
                     buoyancy::apply_buoyancy,
                 )
                     .run_if(sim_running),

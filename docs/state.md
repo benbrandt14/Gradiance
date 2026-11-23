@@ -2,7 +2,7 @@
 
 Overwritten at every handoff; history lives in git and in each brief's
 Outcome (`docs/briefs/`). Keep it to about a screen.
-Last updated: 2026-11-22 (S-5 gears, S-6 quick actions and S-7 lifetime, S-8 conveyors, S-9 camera views, S-10 water spike, S-11 liquify and water tool, S-12 sponge, S-13 body images, S-14 shape from an image, S-15 dispersion, S-16 brush erase, S-17 scene browser, S-18 share file, S-19 string table, S-20 gamepad input, S-21 touch gestures done; Phase S under way: S-1 merged as #306, roadmap,
+Last updated: 2026-11-22 (S-5 gears, S-6 quick actions and S-7 lifetime, S-8 conveyors, S-9 camera views, S-10 water spike, S-11 liquify and water tool, S-12 sponge, S-13 body images, S-14 shape from an image, S-15 dispersion, S-16 brush erase, S-17 scene browser, S-18 share file, S-19 string table, S-20 gamepad input, S-21 touch gestures, S-22 air buoyancy done; Phase S under way: S-1 merged as #306, roadmap,
 audit and phase plan aligned; Q-9 closed as not reproducible on main `8f7c547`; Phase Q merged
 as #305; earlier history in git).
 
@@ -65,6 +65,8 @@ as #305; earlier history in git).
   graph's Pad block publish a stick or button on the bus in play.
   **S-21** touch and trackpad camera gestures are done
   (`interaction::camera_gestures`; platform table in its docs).
+  **S-22** air buoyancy is done: `SimSettings.air_buoyancy` (off by
+  default) lifts every body by the weight of the air it displaces.
   **Next:** S-11..S-22 in number order (S-4 material
   presets rejected by the owner, 2026-11-21, #307).
   **Phase Q is merged (#305):** Q-2..Q-6 and Q-8 done, Q-7 returned (avian
