@@ -30,6 +30,7 @@ mod cut_select_stress;
 mod debug_overlay;
 mod defaults;
 mod editor_ops;
+mod erase;
 mod gears;
 mod graph_keys;
 mod groups;

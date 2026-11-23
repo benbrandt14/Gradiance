@@ -84,7 +84,7 @@ tool_ops! {
     UseTexture => ToolState::Texture, "tool.texture", "texture-tool", "Tools/Texture", "",
         "Use the texture tool: drag a body's image to move it, Shift-drag to scale it, right-drag to turn it.";
     UseSketch => ToolState::Sketch, "tool.sketch", "sketch-tool", "Tools/Sketch", "",
-        "Use the sketch tool: draw freehand; release makes one body of the stroke.";
+        "Use the sketch tool: draw freehand; release makes one body of the stroke. Hold Alt as you press to erase the stroke from the bodies it touches.";
     UseHinge => ToolState::Hinge, "tool.hinge", "hinge-tool", "Tools/Hinge", "H",
         "Use the hinge tool: click where two bodies overlap to hinge them, or on one body to pin it.";
     UsePrismatic => ToolState::Slider, "tool.prismatic", "prismatic-tool", "Tools/Prismatic", "R",
@@ -184,7 +184,10 @@ pub fn hints(tool: ToolState) -> &'static [Hint] {
         ToolState::Thruster => &[("Click a body", "push up"), ("Drag", "aim the push")],
         ToolState::Laser => &[("Drag", "aim the beam"), ("Release on a body", "target it")],
         ToolState::Chain => &[("Drag", "draw the path; release lays the links")],
-        ToolState::Sketch => &[("Drag", "draw; end at the start to fill")],
+        ToolState::Sketch => &[
+            ("Drag", "draw; end at the start to fill"),
+            ("Alt+Drag", "erase from the bodies it touches"),
+        ],
         ToolState::Script(_) => &[("Click", "add a point"), ("Esc or right-click", "cancel")],
     }
 }

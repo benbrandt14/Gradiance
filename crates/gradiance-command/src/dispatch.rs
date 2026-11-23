@@ -7,17 +7,17 @@
 //! (plus the intent and command types themselves).
 
 use crate::array_cmd::ArrayCommand;
-use crate::cut_cmd::CutCommand;
+use crate::cut_cmd::{CutCommand, EraseCommand};
 use crate::group_cmd::{GroupCommand, NameGroupCommand, RegroupCommand, UngroupCommand};
 use crate::insert_cmd::InsertCommand;
 use crate::intent::AdjustLastIntent;
 use crate::intent::name;
 use crate::intent::{
     ArrayIntent, BooleanIntent, ClearHistoryIntent, CommitTransformIntent, CutIntent, DeleteIntent,
-    DeleteJointIntent, DuplicateIntent, GroupIntent, InsertIntent, LiquifyIntent, LoadSceneIntent,
-    MergeIntent, NameGroupIntent, PropertyEditIntent, RedoIntent, RegroupIntent, ScaleIntent,
-    SpawnBodyIntent, SpawnChainIntent, SpawnJointIntent, SpawnNodeIntent, SpawnRodIntent,
-    SpongeIntent, UndoIntent, UngroupIntent,
+    DeleteJointIntent, DuplicateIntent, EraseIntent, GroupIntent, InsertIntent, LiquifyIntent,
+    LoadSceneIntent, MergeIntent, NameGroupIntent, PropertyEditIntent, RedoIntent, RegroupIntent,
+    ScaleIntent, SpawnBodyIntent, SpawnChainIntent, SpawnJointIntent, SpawnNodeIntent,
+    SpawnRodIntent, SpongeIntent, UndoIntent, UngroupIntent,
 };
 use crate::joint_cmd::{DeleteJointCommand, SpawnJointCommand};
 use crate::merge_cmd::MergeCommand;
@@ -102,6 +102,7 @@ command_intents! {
     ScaleIntent => |i| Box::new(ScaleCommand::new(i.targets, i.pivot, i.frame_rot, i.factors)),
     ArrayIntent => |i| Box::new(ArrayCommand::new(i.sources, i.count, i.mode)),
     CutIntent => |i| Box::new(CutCommand::new(i.a, i.b, i.width)),
+    EraseIntent => |i| Box::new(EraseCommand { line: i.line, width: i.width }),
     DeleteJointIntent => |i| Box::new(DeleteJointCommand::new(i.id)),
     MergeIntent => |i| Box::new(MergeCommand::new(i.targets)),
     BooleanIntent => |i| Box::new(MergeCommand::with_op(i.op, i.targets)),

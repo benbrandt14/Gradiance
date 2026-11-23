@@ -5451,5 +5451,59 @@ Settings are global, so flip between the options rather than viewing them side b
             ),
             ingested_as: "S-15, domain::optics (Optics::default, of_index)",
         ),
+        (
+            question: (
+                id: "erase-modifier-alt",
+                title: "Alt held at the press starts an erase stroke",
+                source: "brief S-16",
+                description: r#"The brief offers a held modifier or a toggle in the tool settings. The sketch tool reads Alt at the press: the whole stroke erases. The tool hint row says so."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Alt at the press",
+                        caption: r#"One gesture, no setting to forget; Alt was free in the sketch tool, and the stroke keeps its mode if Alt is let go mid-drag."#,
+                    ),
+                    (
+                        label: "A toggle in the tool settings",
+                        caption: r#"Visible, but a mode the person must turn off again; a second edit path for the same stroke."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "erase-modifier-alt",
+                title: "Alt held at the press starts an erase stroke",
+                choice: Picked("Alt at the press"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-16, interaction::tools::sketch_tool (SketchDraft.erase)",
+        ),
+        (
+            question: (
+                id: "erase-allows-notches",
+                title: "An erase may end inside a body",
+                source: "brief S-16",
+                description: r#"A cut is refused when the stroke ends inside the material (no notches). An erase is an eraser: a stroke that ends inside leaves a notch, one piece. Pieces still follow the cut's rules: fresh polygon-leaf bodies, joints and nodes rewired, a covered body removed."#,
+                decision: true,
+                options: [
+                    (
+                        label: "Allow notches",
+                        caption: r#"An eraser that only works when it crosses the whole body would surprise the person."#,
+                    ),
+                    (
+                        label: "Through strokes only, as cut",
+                        caption: r#"Uniform with cut, but erasing an edge or a corner would do nothing."#,
+                    ),
+                ],
+            ),
+            answer: (
+                question: "erase-allows-notches",
+                title: "An erase may end inside a body",
+                choice: Picked("Allow notches"),
+                note: r#"Decided by the session, not by the owner (owner, 2026-11-17: leave non-interactive changes to the thread, go with best estimates). The owner may reverse it."#,
+                answered_at: "2026-11-22T20:00:00Z",
+            ),
+            ingested_as: "S-16, command::cut_cmd (EraseCommand)",
+        ),
     ],
 )
