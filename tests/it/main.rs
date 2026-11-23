@@ -70,6 +70,7 @@ mod script_examples;
 mod script_tools;
 mod script_units;
 mod scripting;
+mod share;
 mod signal_bind;
 mod signals;
 mod sketch;

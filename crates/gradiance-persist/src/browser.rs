@@ -91,6 +91,16 @@ pub fn list_scenes(folder: &Path) -> Vec<SceneEntry> {
 ///
 /// The encoder's or the disk's error, as text.
 pub fn write_thumbnail(scene: &SceneRecord, path: &Path) -> Result<(), String> {
+    let png = thumbnail_png(scene)?;
+    std::fs::write(thumbnail_path(path), png).map_err(|e| e.to_string())
+}
+
+/// The thumbnail of `scene`, encoded as PNG bytes.
+///
+/// # Errors
+///
+/// The encoder's error, as text.
+pub fn thumbnail_png(scene: &SceneRecord) -> Result<Vec<u8>, String> {
     use bevy::asset::RenderAssetUsages;
     use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
     let image = Image::new(
@@ -104,11 +114,16 @@ pub fn write_thumbnail(scene: &SceneRecord, path: &Path) -> Result<(), String> {
         TextureFormat::Rgba8UnormSrgb,
         RenderAssetUsages::default(),
     );
+    let format = bevy::image::ImageFormat::Png
+        .as_image_crate_format()
+        .ok_or_else(|| "this build has no PNG encoder".to_owned())?;
+    let mut png = Vec::new();
     image
         .try_into_dynamic()
         .map_err(|e| e.to_string())?
-        .save(thumbnail_path(path))
-        .map_err(|e| e.to_string())
+        .write_to(&mut std::io::Cursor::new(&mut png), format)
+        .map_err(|e| e.to_string())?;
+    Ok(png)
 }
 
 /// A disk request from the scene-browser operations.

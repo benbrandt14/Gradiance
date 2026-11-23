@@ -62,7 +62,7 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Direction picker for velocity | done | **S-1** (#306: inspector Starting motion dial) |
 | File load / save / new | present | `load-scene`, `save-scene`, `new-scene`, File menu |
 | File browser with thumbnails | present | Scenes panel, `scene.browse_dir`, `scene.rename`, `scene.trash` (S-17) |
-| Online scene sharing | missing | **S-18** (one-file share, no server) |
+| Online scene sharing | partial | File > Share writes one `.zip` (scene, thumbnail, images), `scene.load` opens it (S-18); no server |
 | Tutorials, lessons | declined | owner, 2026-11-19 ("not an educational tool") |
 | Language choice | missing | **S-19** (string table) |
 | UI scale | *unverified* | egui zoom not checked |
