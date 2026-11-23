@@ -14,6 +14,13 @@
 //! edited laser shows its beam at once), against the colliders as the last
 //! step left them.
 //!
+//! White light (brief S-15): a laser marked white traces once more per
+//! colour of `optics::SPECTRUM_WAVELENGTHS`, each through the bodies'
+//! indices at that wavelength (Cauchy). The paths agree until the first
+//! dispersive refraction; [`LaserBeam::split`] counts the corners they share,
+//! and the overlay draws those in white and the rest in colour. The hit and
+//! the distance stay the reference trace's (the sodium D line).
+//!
 //! What a beam hits: every collider except sensors (fluid regions) and the
 //! body the laser rides. A laser on a body hits only the bodies that share a
 //! collision layer with it (collision layer ≡ visual depth); a free laser
@@ -26,6 +33,7 @@ use gradiance_core::ids::IdIndex;
 use gradiance_domain::Body;
 use gradiance_domain::laser::Laser;
 use gradiance_domain::node::{BehaviorNode, NodeAttachment, NodeKind};
+use gradiance_domain::optics::SPECTRUM_WAVELENGTHS;
 
 /// The derived beam of a laser node: its path, whether it reaches the
 /// target, its length, and the bus names it publishes under. Rebuilt every
@@ -44,6 +52,12 @@ pub struct LaserBeam {
     pub hit_name: String,
     /// The bus name of the distance signal (`<name>.distance`).
     pub distance_name: String,
+    /// A white laser's coloured paths (brief S-15), red to violet; empty
+    /// for a coloured laser. Reused like `path`.
+    pub spectrum: Vec<Vec<Vec2>>,
+    /// How many leading corners every spectrum path shares with `path`:
+    /// the white part of the beam.
+    pub split: usize,
 }
 
 impl LaserBeam {
@@ -56,6 +70,8 @@ impl LaserBeam {
             distance: 0.0,
             hit_name: laser.name.clone(),
             distance_name: laser.distance_name(),
+            spectrum: Vec::new(),
+            split: 0,
         }
     }
 
@@ -160,7 +176,52 @@ pub fn trace_lasers(
         );
         beam.hit = end.absorbed;
         beam.distance = end.length;
+        if !laser.white {
+            beam.spectrum.clear();
+            beam.split = beam.path.len();
+            continue;
+        }
+        let LaserBeam {
+            path,
+            spectrum,
+            split,
+            ..
+        } = &mut *beam;
+        spectrum.resize_with(SPECTRUM_WAVELENGTHS.len(), || {
+            Vec::with_capacity(path.capacity())
+        });
+        *split = path.len();
+        for (colour, wavelength) in spectrum.iter_mut().zip(SPECTRUM_WAVELENGTHS) {
+            cast_beam(
+                &spatial,
+                origin,
+                dir,
+                laser.reach(),
+                laser.bounce_limit(),
+                &filter,
+                &skip,
+                target,
+                &|e| {
+                    optics
+                        .get(e)
+                        .ok()
+                        .map(|o| o.sanitized().index_at(wavelength))
+                },
+                colour,
+            );
+            *split = (*split).min(shared_corners(path, colour));
+        }
     }
+}
+
+/// How many leading corners two beam paths share (within a micrometre).
+/// Pure.
+#[must_use]
+pub fn shared_corners(a: &[Vec2], b: &[Vec2]) -> usize {
+    a.iter()
+        .zip(b)
+        .take_while(|(p, q)| p.distance_squared(**q) < 1e-12)
+        .count()
 }
 
 #[cfg(test)]
@@ -195,6 +256,14 @@ mod tests {
         let (o, d) = laser_ray(&laser, &NodeAttachment::free(), None, Vec2::ONE);
         assert_eq!(o, Vec2::ONE);
         assert!((d - Vec2::NEG_X).length() < 1e-5, "{d}");
+    }
+
+    #[test]
+    fn paths_share_corners_until_they_part() {
+        let a = [Vec2::ZERO, Vec2::X, Vec2::new(2.0, 0.0)];
+        let b = [Vec2::ZERO, Vec2::X, Vec2::new(2.0, 0.1)];
+        assert_eq!(shared_corners(&a, &b), 2);
+        assert_eq!(shared_corners(&a, &a), 3);
     }
 
     #[test]

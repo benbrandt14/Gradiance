@@ -574,7 +574,9 @@ fn commit_lifetime(
 /// The optics editor (brief S-3): a toggle that lets laser beams through
 /// the body, and its refractive index. One undo step per gesture.
 fn optics_block(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProps, primary: Entity) {
-    use gradiance_domain::optics::{DEFAULT_INDEX, MAX_INDEX, MIN_INDEX, Optics};
+    use gradiance_domain::optics::{
+        DEFAULT_INDEX, GLASS_DISPERSION, MAX_DISPERSION, MAX_INDEX, MIN_INDEX, Optics,
+    };
     let current = props.optics_q.get(primary).ok().copied();
     let mut on = current.is_some();
     if ui
@@ -601,7 +603,43 @@ fn optics_block(ui: &mut egui::Ui, selection: &Selection, props: &mut BodyProps,
             MIN_INDEX..=MAX_INDEX,
             Dimension::Dimensionless,
         ) {
-            commit_optics(selection, props, Some(Optics { index: new }.sanitized()));
+            commit_optics(
+                selection,
+                props,
+                Some(
+                    Optics {
+                        index: new,
+                        ..optics
+                    }
+                    .sanitized(),
+                ),
+            );
+        }
+    });
+    let mut dispersion = optics.dispersion;
+    ui.horizontal(|ui| {
+        ui.label("dispersion")
+            .on_hover_text("Cauchy B (square micrometres): how far a white beam fans into colours; 0.004 crown glass, 0.01 flint");
+        if let Commit::Done(_, new) = precise_drag_clamped(
+            ui,
+            ui.id().with("optics-dispersion"),
+            &mut dispersion,
+            GLASS_DISPERSION,
+            0.0005,
+            0.0..=MAX_DISPERSION,
+            Dimension::Dimensionless,
+        ) {
+            commit_optics(
+                selection,
+                props,
+                Some(
+                    Optics {
+                        dispersion: new,
+                        ..optics
+                    }
+                    .sanitized(),
+                ),
+            );
         }
     });
 }

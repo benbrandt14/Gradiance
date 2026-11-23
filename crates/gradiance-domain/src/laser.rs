@@ -75,6 +75,10 @@ pub struct Laser {
     /// The beam's colour (brief S-3). `None`: the look's laser ink.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<crate::appearance::Rgba>,
+    /// White light (brief S-15): the beam splits into the spectrum's
+    /// colours where a dispersive body refracts it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub white: bool,
 }
 
 impl Default for Laser {
@@ -88,6 +92,7 @@ impl Default for Laser {
             range: Length(DEFAULT_RANGE),
             bounces: DEFAULT_BOUNCES,
             color: None,
+            white: false,
         }
     }
 }

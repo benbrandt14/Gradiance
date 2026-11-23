@@ -651,7 +651,8 @@ fn laser_editor(
 }
 
 /// A laser's beam colour (brief S-3): a palette swatch, or "auto" for the
-/// look's laser ink. One click, one edit; returns whether it changed.
+/// look's laser ink, and white light (brief S-15). One click, one edit;
+/// returns whether it changed.
 fn beam_colour_row(ui: &mut egui::Ui, laser: &mut gradiance_domain::laser::Laser) -> bool {
     let mut committed = false;
     ui.horizontal(|ui| {
@@ -684,6 +685,13 @@ fn beam_colour_row(ui: &mut egui::Ui, laser: &mut gradiance_domain::laser::Laser
             }
         }
     });
+    if ui
+        .checkbox(&mut laser.white, "white light")
+        .on_hover_text("splits into colours where a dispersive body refracts it (a prism)")
+        .changed()
+    {
+        committed = true;
+    }
     committed
 }
 

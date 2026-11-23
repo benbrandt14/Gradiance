@@ -124,7 +124,7 @@ jitter, water surface, laser canvas block, `signal.bind`).
 | Particle water, add water | present | particles (S-10, `docs/particle-fluid-decision.md`); water tool, `water.fill`, `water.drain` (S-11); `Fluid` region (N-7) stays |
 | Refraction, total internal reflection | missing | **S-3** |
 | Mirror (index ∞) | present | every solid body reflects (N-8) |
-| Dispersion, white light | missing | **S-15** (after S-3) |
+| Dispersion, white light | present | `Optics.dispersion` (Cauchy B), `set-dispersion`, laser "white light" (S-15) |
 
 ## Scripting
 
