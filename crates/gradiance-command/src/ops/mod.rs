@@ -28,6 +28,7 @@
 pub mod body;
 pub mod chain;
 pub mod group;
+pub mod image;
 pub mod joint;
 pub mod look;
 pub mod node;
@@ -196,6 +197,10 @@ fn fill_context(world: &mut World, ctx: &mut OpContext) {
     ctx.insert(gradiance_signal::sample_quantities(world));
     // The live environment: File ▸ New keeps its workstation half.
     ctx.insert(gradiance_scene::EnvironmentRecord::capture(world));
+    // Where a relative image path resolves (briefs S-13, S-14).
+    if let Some(folder) = world.get_resource::<gradiance_core::scene_folder::SceneFolder>() {
+        ctx.insert(folder.clone());
+    }
     if let Some(settings) = world.get_resource::<SimSettings>() {
         ctx.insert(settings.clone());
     }
@@ -238,7 +243,9 @@ impl Plugin for SceneOpsPlugin {
             water::register(&mut registry);
             sponge::register(&mut registry);
             texture::register(&mut registry);
+            image::register(&mut registry);
         }
+        app.add_message::<image::ImportImageRequest>();
         app.world_mut()
             .resource_mut::<OpContextFillers>()
             .add(fill_context);

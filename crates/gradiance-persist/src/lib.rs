@@ -128,6 +128,7 @@ pub fn handle_persist_requests(world: &mut World) {
     let loads: Vec<LoadSceneRequest> = drain(world);
     let snapshots: Vec<SnapshotRequest> = drain(world);
     let inserts: Vec<ops::InsertSceneRequest> = drain(world);
+    let imports: Vec<gradiance_command::ops::image::ImportImageRequest> = drain(world);
 
     for request in saves {
         let path = request
@@ -164,6 +165,26 @@ pub fn handle_persist_requests(world: &mut World) {
 
     // File ▸ Insert…: the dialog's answer goes back through `scene.insert`,
     // so it reads, re-ids and places the file as any other call does.
+    // File ▸ Import image as body: the picked file goes back through
+    // `scene.import_image` (brief S-14).
+    for request in imports {
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter("Image", &["png"])
+            .pick_file()
+        else {
+            continue;
+        };
+        world.write_message(gradiance_op::InvokeOp::with(
+            "scene.import_image",
+            gradiance_op::json!({
+                "path": path.to_string_lossy(),
+                "x": request.x,
+                "y": request.y,
+                "width": request.width,
+            }),
+        ));
+    }
+
     for request in inserts {
         let Some(path) = ask_load_path() else {
             continue;

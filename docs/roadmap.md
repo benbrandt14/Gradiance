@@ -785,7 +785,7 @@ Added 2026-11-21 (owner: "include the others"):
     coupling, budget) — done. 11. **S-11** liquify, water fill, drain — done.
 12. **S-12** sponge: a spring lattice inside the outline — done.
 13. **S-13** image texture on a body (through the toon ramp or raw) — done.
-14. **S-14** shape from an image (alpha → field leaf or traced polygon).
+14. **S-14** shape from an image (alpha → field leaf or traced polygon) — done (traced polygon).
 15. **S-15** dispersion and white light (after S-3).
 16. **S-16** brush erase mode of the sketch tool.
 17. **S-17** scene browser with thumbnails. 18. **S-18** share a scene

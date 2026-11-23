@@ -167,6 +167,15 @@ fn file_menu(ui: &mut egui::Ui, writers: &mut MenuWriters) {
             ));
             ui.close();
         }
+        if ui.button("Import image as body…").clicked() {
+            // An image's opaque pixels as one body (brief S-14); an empty
+            // path is the dialog. One metre wide, at the origin.
+            writers.invoke.write(InvokeOp::with(
+                "scene.import_image",
+                json!({"path": "", "x": 0.0, "y": 0.0, "width": 1.0}),
+            ));
+            ui.close();
+        }
         ui.separator();
         if ui.button("Save").clicked() {
             // An empty path: the last one, else the dialog (`scene.save`).
