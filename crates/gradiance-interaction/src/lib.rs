@@ -19,6 +19,7 @@
 
 pub mod align;
 pub mod camera;
+pub mod camera_gestures;
 pub mod cursor;
 pub mod debug_ops;
 pub mod gesture;
@@ -157,6 +158,7 @@ impl Plugin for InteractionPlugin {
                 camera::apply_projection
                     .run_if(resource_changed::<gradiance_domain::settings::ScenerySettings>),
                 camera::pan_and_zoom_camera,
+                camera_gestures::touch_and_trackpad,
                 camera::apply_camera_requests,
                 camera::follow_and_glide,
                 camera::apply_camera_rig,

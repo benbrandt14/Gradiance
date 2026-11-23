@@ -81,6 +81,7 @@ mod sponge;
 mod texture;
 mod thrusters;
 mod tools;
+mod touch_gestures;
 mod ui_conflicts;
 mod ui_groups;
 mod ui_input;
